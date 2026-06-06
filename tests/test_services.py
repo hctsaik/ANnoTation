@@ -55,6 +55,34 @@ def test_register_and_list_tenants(tmp_path: Path) -> None:
     assert t2["api_token"] == "tok"
 
 
+def test_delete_tenant_removes_it_and_cascades(tmp_path: Path) -> None:
+    """Deleting a tenant removes only that tenant and cascades its user
+    mappings (admin can clean up a test connection). Guards module_022's
+    delete-connection feature end-to-end (service + sqlite cascade)."""
+    svc = _service(tmp_path)
+    t1 = svc.register_tenant("System-A", "fake://host-a", "coco")["tenant_id"]
+    t2 = svc.register_tenant("System-B", "fake://host-b", "coco")["tenant_id"]
+    svc.add_user_to_tenant(t1, "user001", ant_id="ANT-1")
+    assert svc.list_tenant_users(t1, ant_id="ANT-1")
+
+    svc.delete_tenant(t1)
+
+    ids = {t["tenant_id"] for t in svc.list_tenants()}
+    assert t1 not in ids and t2 in ids
+    # tenant row gone
+    with pytest.raises(NotFoundError):
+        svc.get_tenant(t1)
+    # user mappings cascaded (queried directly: list_tenant_users would now
+    # raise NotFoundError because the tenant is gone)
+    assert svc.workspace.metadata.list_user_mappings(t1) == []
+
+
+def test_delete_tenant_not_found(tmp_path: Path) -> None:
+    svc = _service(tmp_path)
+    with pytest.raises(NotFoundError):
+        svc.delete_tenant("nonexistent-id")
+
+
 def test_get_tenant(tmp_path: Path) -> None:
     svc = _service(tmp_path)
     created = svc.register_tenant("Sys", "fake://x", "coco")
