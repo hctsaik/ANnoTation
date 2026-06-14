@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-_HERE = Path(__file__).resolve().parent
+_HERE = Path(__file__).parent
 
 
 def _load(cim_log: Path):

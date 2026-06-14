@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 
-_HERE = Path(__file__).resolve().parent
+_HERE = Path(__file__).parent
 
 
 class _Context:

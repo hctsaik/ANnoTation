@@ -5,7 +5,7 @@ from pathlib import Path
 
 import streamlit as st
 
-_HERE = Path(__file__).resolve().parent
+_HERE = Path(__file__).parent
 _cfg_spec = importlib.util.spec_from_file_location("_016_config", _HERE / "_config.py")
 _cfg = importlib.util.module_from_spec(_cfg_spec)
 _cfg_spec.loader.exec_module(_cfg)

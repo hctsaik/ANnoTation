@@ -11,8 +11,8 @@ from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
-_HERE  = Path(__file__).resolve().parent
-_PROJECT_ROOT = Path(__file__).resolve().parents[6]
+_HERE  = Path(__file__).parent
+_PROJECT_ROOT = Path(__file__).parents[6]
 _CIM_LOG_DIR  = Path(os.environ.get("CIM_LOG_DIR", str(_PROJECT_ROOT / "tmp" / "cim_log")))
 
 # ── 動態載入依賴 ──────────────────────────────────────────────────────────────

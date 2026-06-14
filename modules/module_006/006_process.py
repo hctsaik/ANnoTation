@@ -190,14 +190,14 @@ def execute_logic(params: dict) -> dict:
             import importlib.util as _ilu
             from pathlib import Path as _Path
             import os as _os
-            _HERE = _Path(__file__).resolve().parent
+            _HERE = _Path(__file__).parent
             _spec = _ilu.spec_from_file_location(
                 "_manifest_db",
                 _HERE.parents[3] / "scripts" / "shared" / "_manifest_db.py",
             )
             _mdb = _ilu.module_from_spec(_spec)
             _spec.loader.exec_module(_mdb)
-            _proj = _Path(__file__).resolve().parents[6]
+            _proj = _Path(__file__).parents[6]
             _cim = _Path(_os.environ.get(
                 "CIM_LOG_DIR",
                 str(_proj / "tmp" / "cim_log"),

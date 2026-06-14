@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 
-_HERE = Path(__file__).resolve().parent
+_HERE = Path(__file__).parent
 _SHARED = _HERE.parents[3] / "scripts" / "shared" / "_manifest_db.py"
 
 

@@ -14,7 +14,7 @@ from pathlib import Path
 
 # ─── Logger 設定 ──────────────────────────────────────────────────────────────
 
-_LOG_DIR = Path(os.environ.get("CIM_LOG_DIR", str(Path(__file__).resolve().parents[6] / "tmp" / "cim_log")))
+_LOG_DIR = Path(os.environ.get("CIM_LOG_DIR", str(Path(__file__).parents[6] / "tmp" / "cim_log")))
 _LOG_FILE = _LOG_DIR / "module_012_process.log"
 
 _LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -27,7 +27,7 @@ _log.setLevel(logging.INFO)
 
 # ─── 動態載入 _config + _manifest_db ─────────────────────────────────────────
 
-_HERE = Path(__file__).resolve().parent
+_HERE = Path(__file__).parent
 
 _cfg_spec = _ilu.spec_from_file_location("_012_config", _HERE / "_config.py")
 _cfg = _ilu.module_from_spec(_cfg_spec)
@@ -39,7 +39,7 @@ _mdb_spec = _ilu.spec_from_file_location(
 _mdb = _ilu.module_from_spec(_mdb_spec)
 _mdb_spec.loader.exec_module(_mdb)
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[6]
+_PROJECT_ROOT = Path(__file__).parents[6]
 
 
 # ─── 輔助函式 ─────────────────────────────────────────────────────────────────

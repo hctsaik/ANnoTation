@@ -10,9 +10,9 @@ from pathlib import Path
 
 import streamlit as st
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[6]
+_PROJECT_ROOT = Path(__file__).parents[6]
 
-_HERE = Path(__file__).resolve().parent
+_HERE = Path(__file__).parent
 
 _help_spec = importlib.util.spec_from_file_location("_help", _HERE.parents[3] / "scripts" / "shared" / "_help.py")
 _help = importlib.util.module_from_spec(_help_spec)

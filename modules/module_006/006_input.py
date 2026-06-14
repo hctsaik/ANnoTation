@@ -11,10 +11,10 @@ try:
     from _config import get_annotation_labels, set_annotation_labels
 except ImportError:
     import sys as _sys
-    _sys.path.insert(0, str(Path(__file__).resolve().parent))
+    _sys.path.insert(0, str(Path(__file__).parent))
     from _config import get_annotation_labels, set_annotation_labels
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[6]
+_PROJECT_ROOT = Path(__file__).parents[6]
 _DEFAULT_ANIMAL_DIR = _PROJECT_ROOT / "testData" / "animal"
 _DEFAULT_DB = _DEFAULT_ANIMAL_DIR / "animals.db"
 _DEFAULT_WORKSPACE = _PROJECT_ROOT / "tmp" / "animal-annotation"
@@ -22,7 +22,7 @@ _DEFAULT_WORKSPACE = _PROJECT_ROOT / "tmp" / "animal-annotation"
 # ── Manifest DB 動態載入 ───────────────────────────────────────────────────────
 
 try:
-    _HERE_006 = Path(__file__).resolve().parent
+    _HERE_006 = Path(__file__).parent
     _spec_mdb = _ilu.spec_from_file_location(
         "_manifest_db",
         _HERE_006.parent / "shared" / "_manifest_db.py",
@@ -37,7 +37,7 @@ except Exception:
 def _get_manifest_db_path_006() -> Path:
     _cim_log = Path(os.environ.get(
         "CIM_LOG_DIR",
-        str(Path(__file__).resolve().parents[6] / "tmp" / "cim_log"),
+        str(Path(__file__).parents[6] / "tmp" / "cim_log"),
     ))
     return _cim_log / "db" / "manifest.sqlite"
 
@@ -194,7 +194,7 @@ def render_input() -> dict:
     )
 
     with st.expander("📖 使用說明", expanded=False):
-        _guide_path = Path(__file__).resolve().parent / "guide.html"
+        _guide_path = Path(__file__).parent / "guide.html"
         if _guide_path.exists():
             import streamlit.components.v1 as _components
             _components.html(_guide_path.read_text(encoding="utf-8"), height=700, scrolling=True)

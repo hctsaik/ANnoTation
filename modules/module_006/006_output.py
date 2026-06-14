@@ -14,14 +14,14 @@ try:
     from db_utils import SimpleDAO
 except ModuleNotFoundError:
     import sys
-    sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "tools"))
+    sys.path.insert(0, str(Path(__file__).parents[4] / "tools"))
     from db_utils import SimpleDAO
 
 try:
     from _config import get_annotation_labels
 except ImportError:
     import sys as _sys
-    _sys.path.insert(0, str(Path(__file__).resolve().parent))
+    _sys.path.insert(0, str(Path(__file__).parent))
     from _config import get_annotation_labels
 
 _SELECT_COLS = "id, filename, file_type, image_time, true_label, classification, tagged_at"

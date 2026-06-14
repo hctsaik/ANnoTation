@@ -7,7 +7,7 @@ import shutil
 from pathlib import Path
 
 
-_HERE = Path(__file__).resolve().parent
+_HERE = Path(__file__).parent
 _CFG_PATH = _HERE / "_config.py"
 
 

@@ -22,7 +22,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-_HERE = Path(__file__).resolve().parent
+_HERE = Path(__file__).parent
 
 _cfg_spec = _ilu.spec_from_file_location("_016_config", _HERE / "_config.py")
 _cfg = _ilu.module_from_spec(_cfg_spec)
@@ -34,7 +34,7 @@ _mdb_spec = _ilu.spec_from_file_location(
 _mdb = _ilu.module_from_spec(_mdb_spec)
 _mdb_spec.loader.exec_module(_mdb)
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[6]
+_PROJECT_ROOT = Path(__file__).parents[6]
 _CIM_LOG_DIR = Path(os.environ.get("CIM_LOG_DIR", str(_PROJECT_ROOT / "tmp" / "cim_log")))
 
 _logger = logging.getLogger("m016_process")

@@ -22,13 +22,13 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).parent))
 import _db as db
 import _xany_launcher as launcher
 from _config import get_db_path
 
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[6]
+_PROJECT_ROOT = Path(__file__).parents[6]
 _DEFAULT_XANY_BASE = _PROJECT_ROOT / "tmp" / "cim_log" / "annotation-sessions"
 
 

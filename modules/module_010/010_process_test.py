@@ -16,7 +16,7 @@ import pytest
 
 # ─── 動態載入待測模組 ─────────────────────────────────────────────────────────
 
-_HERE = Path(__file__).resolve().parent
+_HERE = Path(__file__).parent
 
 
 def _load_module(name: str, path: Path):

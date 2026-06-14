@@ -42,7 +42,7 @@ def _ann_path(session_dir: str | Path, frame_idx: int) -> Path:
 
 
 def _worker_script() -> Path:
-    return Path(__file__).resolve().parent / "_worker.py"
+    return Path(__file__).parent / "_worker.py"
 
 
 # ── public API ────────────────────────────────────────────────────────────────
@@ -90,7 +90,7 @@ def start_propagation(session_dir: str | Path, session_data: dict) -> dict:
 
     subprocess.Popen(
         [sys.executable, str(_worker_script()), str(sd)],
-        cwd=str(Path(__file__).resolve().parent),
+        cwd=str(Path(__file__).parent),
     )
     return {"state": "started", "session_dir": str(sd)}
 
@@ -102,7 +102,7 @@ def re_propagate(session_dir: str | Path, from_frame_idx: int) -> dict:
         tp.unlink()
     subprocess.Popen(
         [sys.executable, str(_worker_script()), str(sd), "--from-frame", str(from_frame_idx)],
-        cwd=str(Path(__file__).resolve().parent),
+        cwd=str(Path(__file__).parent),
     )
     return {"state": "started", "from_frame": from_frame_idx}
 

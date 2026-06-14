@@ -8,7 +8,7 @@ from pathlib import Path
 
 import streamlit as st
 
-_HERE = Path(__file__).resolve().parent
+_HERE = Path(__file__).parent
 _PROCESS_FILE = _HERE / "017_process.py"
 
 _mdb_spec = _ilu.spec_from_file_location(
@@ -22,7 +22,7 @@ _help = _ilu.module_from_spec(_help_spec)
 _help_spec.loader.exec_module(_help)
 
 _CIM_LOG_DIR = Path(os.environ.get(
-    "CIM_LOG_DIR", str(Path(__file__).resolve().parents[6] / "tmp" / "cim_log")
+    "CIM_LOG_DIR", str(Path(__file__).parents[6] / "tmp" / "cim_log")
 ))
 
 
@@ -282,7 +282,7 @@ def _render_last_sync(manifest_id: str) -> None:
     try:
         _cfg013_spec = _ilu.spec_from_file_location(
             "_013_config",
-            Path(__file__).resolve().parents[1] / "module_013" / "_config.py",
+            Path(__file__).parents[1] / "module_013" / "_config.py",
         )
         _cfg013 = _ilu.module_from_spec(_cfg013_spec)
         _cfg013_spec.loader.exec_module(_cfg013)

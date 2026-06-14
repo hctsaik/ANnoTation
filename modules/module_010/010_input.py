@@ -10,7 +10,7 @@ import streamlit as st
 
 import importlib.util as _ilu
 
-_HERE = Path(__file__).resolve().parent
+_HERE = Path(__file__).parent
 
 _cfg_spec = _ilu.spec_from_file_location("_010_config", _HERE / "_config.py")
 _cfg = _ilu.module_from_spec(_cfg_spec)

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import streamlit as st
 
-_HERE = Path(__file__).resolve().parent
+_HERE = Path(__file__).parent
 
 _help_spec = _ilu.spec_from_file_location("_help", _HERE.parents[3] / "scripts" / "shared" / "_help.py")
 _help = _ilu.module_from_spec(_help_spec)

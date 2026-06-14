@@ -5,7 +5,7 @@ import json
 import sys
 from pathlib import Path
 
-_HERE = Path(__file__).resolve().parent
+_HERE = Path(__file__).parent
 _ENGINE_ROOT = _HERE.parents[4]
 
 if str(_ENGINE_ROOT) not in sys.path:

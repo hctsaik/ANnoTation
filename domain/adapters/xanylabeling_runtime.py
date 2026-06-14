@@ -88,7 +88,7 @@ def launch_xanylabeling_project(project_dir: Path | str) -> dict:
 
 
 def _candidate_executables() -> list[tuple[str, str | None]]:
-    repo_root = Path(__file__).resolve().parents[4]
+    repo_root = Path(__file__).parents[4]
     env_exe = os.environ.get("XANYLABELING_EXE")
     return [
         ("XANYLABELING_EXE", env_exe),

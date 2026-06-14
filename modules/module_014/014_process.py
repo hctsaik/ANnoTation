@@ -23,7 +23,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import NamedTuple
 
-_HERE = Path(__file__).resolve().parent
+_HERE = Path(__file__).parent
 
 _cfg_spec = _ilu.spec_from_file_location("_014_config", _HERE / "_config.py")
 _cfg = _ilu.module_from_spec(_cfg_spec)
@@ -35,7 +35,7 @@ _mdb_spec = _ilu.spec_from_file_location(
 _mdb = _ilu.module_from_spec(_mdb_spec)
 _mdb_spec.loader.exec_module(_mdb)
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[6]
+_PROJECT_ROOT = Path(__file__).parents[6]
 _CIM_LOG_DIR = Path(os.environ.get("CIM_LOG_DIR", str(_PROJECT_ROOT / "tmp" / "cim_log")))
 
 

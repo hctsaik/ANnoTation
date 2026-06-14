@@ -14,7 +14,7 @@ from pathlib import Path
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 
-_HERE = Path(__file__).resolve().parent
+_HERE = Path(__file__).parent
 sys.path.insert(0, str(_HERE))
 
 _spec = _ilu.spec_from_file_location("_009_process", _HERE / "009_process.py")

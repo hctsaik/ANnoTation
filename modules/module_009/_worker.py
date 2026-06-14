@@ -229,7 +229,7 @@ def _propagate_step(
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 def run(db_path: Path, session_id: int) -> None:
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    sys.path.insert(0, str(Path(__file__).parent))
     import _db as db
 
     session = db.get_session_status(db_path, session_id)
@@ -328,7 +328,7 @@ if __name__ == "__main__":
     try:
         run(db_path_arg, session_id_arg)
     except Exception:
-        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        sys.path.insert(0, str(Path(__file__).parent))
         try:
             import _db as db
             db.update_session(db_path_arg, session_id_arg, status="未標記")

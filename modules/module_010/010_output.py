@@ -9,7 +9,7 @@ from pathlib import Path
 
 import streamlit as st
 
-_HERE = Path(__file__).resolve().parent
+_HERE = Path(__file__).parent
 
 _mdb_spec = _ilu.spec_from_file_location(
     "_manifest_db", _HERE.parents[3] / "scripts" / "shared" / "_manifest_db.py"
@@ -25,7 +25,7 @@ _help_spec = _ilu.spec_from_file_location("_help", _HERE.parents[3] / "scripts" 
 _help = _ilu.module_from_spec(_help_spec)
 _help_spec.loader.exec_module(_help)
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[6]
+_PROJECT_ROOT = Path(__file__).parents[6]
 _CIM_LOG_DIR = Path(os.environ.get("CIM_LOG_DIR", str(_PROJECT_ROOT / "tmp" / "cim_log")))
 
 _SOURCE_LABEL = {"folder": "📁 資料夾", "db": "🗄️ 資料庫", "api": "🌐 API"}

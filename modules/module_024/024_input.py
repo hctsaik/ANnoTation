@@ -8,7 +8,7 @@ from pathlib import Path
 
 import streamlit as st
 
-_HERE = Path(__file__).resolve().parent
+_HERE = Path(__file__).parent
 _ui_spec = _ilu.spec_from_file_location("_ui_components", _HERE.parents[3] / "scripts" / "shared" / "ui_components.py")
 _ui = _ilu.module_from_spec(_ui_spec)
 _ui_spec.loader.exec_module(_ui)

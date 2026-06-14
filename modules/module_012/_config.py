@@ -9,7 +9,7 @@ from pathlib import Path
 # module's _config.py. Module-012-specific helpers (classifications, classes.txt,
 # enhanced dir, xany work dir) stay here. Paths are byte-for-byte identical
 # because _base.log_dir() resolves to the same CIM_LOG_DIR.
-_HERE = Path(__file__).resolve().parent
+_HERE = Path(__file__).parent
 _spec = _ilu.spec_from_file_location("_config_base", _HERE.parents[3] / "scripts" / "shared" / "_config_base.py")
 _base = _ilu.module_from_spec(_spec)
 _spec.loader.exec_module(_base)

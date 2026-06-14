@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-_HERE = Path(__file__).resolve().parent
+_HERE = Path(__file__).parent
 sys.path.insert(0, str(_HERE))
 
 import _db as db

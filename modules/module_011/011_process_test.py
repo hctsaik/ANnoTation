@@ -14,7 +14,7 @@ import pytest
 
 # ─── 載入 011_process（不透過 package import，直接用 importlib）────────────────
 
-_HERE = Path(__file__).resolve().parent
+_HERE = Path(__file__).parent
 _PROCESS_PATH = _HERE / "011_process.py"
 
 _spec = _ilu.spec_from_file_location("process_011", _PROCESS_PATH)

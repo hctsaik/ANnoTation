@@ -21,7 +21,7 @@ from typing import Optional
 import psutil
 
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[6]
+_PROJECT_ROOT = Path(__file__).parents[6]
 
 
 def _get_xany_exe() -> str:
@@ -65,13 +65,13 @@ def _xany_command_prefix(exe: str) -> list[str]:
 
 
 def _worker_script() -> Path:
-    return Path(__file__).resolve().parent / "_worker.py"
+    return Path(__file__).parent / "_worker.py"
 
 
 def start_tracking_worker(db_path: Path, session_id: int) -> int:
     proc = subprocess.Popen(
         [sys.executable, str(_worker_script()), str(db_path), str(session_id)],
-        cwd=str(Path(__file__).resolve().parent),
+        cwd=str(Path(__file__).parent),
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     return proc.pid
@@ -82,7 +82,7 @@ def open_xanylabeling(db_path: Path, session_id: int) -> dict:
     Build an X-AnyLabeling project from frame_annotations and launch it.
     Returns {"ok": bool, "error": str | None, "xany_pid": int | None}
     """
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    sys.path.insert(0, str(Path(__file__).parent))
     import _db as db
 
     session = db.get_session_status(db_path, session_id)
@@ -152,7 +152,7 @@ def open_single_frame(db_path: Path, session_id: int, frame_idx: int) -> dict:
     """
     Launch X-AnyLabeling for a single frame only (correction mode).
     """
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    sys.path.insert(0, str(Path(__file__).parent))
     import _db as db
 
     session = db.get_session_status(db_path, session_id)
@@ -210,7 +210,7 @@ def update_after_xany_close(db_path: Path, session_id: int) -> dict:
     Scan xany_project_dir/annotations/, parse all JSON files, upsert frame_annotations,
     release lock, update summary, set status='已標記'.
     """
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    sys.path.insert(0, str(Path(__file__).parent))
     import _db as db
 
     session = db.get_session_status(db_path, session_id)
@@ -260,7 +260,7 @@ def update_after_single_close(db_path: Path, session_id: int, frame_idx: int, si
     """
     Parse the single-frame correction result and upsert only that frame.
     """
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    sys.path.insert(0, str(Path(__file__).parent))
     import _db as db
 
     ann_file = single_ann_dir / f"frame_{frame_idx:06d}.json"
@@ -304,7 +304,7 @@ def sync_to_db(db_path: Path, session_ids: list[int]) -> dict:
     """
     Archive '已標記' sessions: move temp annotations to backup/, set status='已同步'.
     """
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    sys.path.insert(0, str(Path(__file__).parent))
     import _db as db
     import shutil
 

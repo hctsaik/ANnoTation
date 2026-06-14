@@ -12,18 +12,18 @@ from streamlit_autorefresh import st_autorefresh
 
 try:
     import importlib.util as _ilu
-    _spec = _ilu.spec_from_file_location("_008_process", Path(__file__).resolve().parent / "008_process.py")
+    _spec = _ilu.spec_from_file_location("_008_process", Path(__file__).parent / "008_process.py")
     _proc = _ilu.module_from_spec(_spec)
     _spec.loader.exec_module(_proc)
 except Exception:
     import sys as _sys
-    _sys.path.insert(0, str(Path(__file__).resolve().parent))
+    _sys.path.insert(0, str(Path(__file__).parent))
     import importlib.util as _ilu
-    _spec = _ilu.spec_from_file_location("_008_process", Path(__file__).resolve().parent / "008_process.py")
+    _spec = _ilu.spec_from_file_location("_008_process", Path(__file__).parent / "008_process.py")
     _proc = _ilu.module_from_spec(_spec)
     _spec.loader.exec_module(_proc)
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[6]
+_PROJECT_ROOT = Path(__file__).parents[6]
 _DEFAULT_SESSION_BASE = _PROJECT_ROOT / "tmp" / "cim_log" / "video-tracking"
 
 _CJK_FONTS = [

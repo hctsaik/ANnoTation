@@ -6,7 +6,7 @@ from pathlib import Path
 
 import streamlit as st
 
-_HERE = Path(__file__).resolve().parent
+_HERE = Path(__file__).parent
 
 _proc_spec = _ilu.spec_from_file_location("_022_process", _HERE / "022_process.py")
 _proc = _ilu.module_from_spec(_proc_spec)

@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 
 # Load process module without Streamlit dependency
-_MODULE_DIR = Path(__file__).resolve().parent
+_MODULE_DIR = Path(__file__).parent
 if str(_MODULE_DIR) not in sys.path:
     sys.path.insert(0, str(_MODULE_DIR))
 

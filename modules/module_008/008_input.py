@@ -17,19 +17,19 @@ from streamlit_autorefresh import st_autorefresh
 try:
     from _config import get_annotation_labels
     import importlib.util as _ilu
-    _spec = _ilu.spec_from_file_location("_008_process", Path(__file__).resolve().parent / "008_process.py")
+    _spec = _ilu.spec_from_file_location("_008_process", Path(__file__).parent / "008_process.py")
     _proc = _ilu.module_from_spec(_spec)
     _spec.loader.exec_module(_proc)
 except ImportError:
     import sys as _sys
-    _sys.path.insert(0, str(Path(__file__).resolve().parent))
+    _sys.path.insert(0, str(Path(__file__).parent))
     from _config import get_annotation_labels
     import importlib.util as _ilu
-    _spec = _ilu.spec_from_file_location("_008_process", Path(__file__).resolve().parent / "008_process.py")
+    _spec = _ilu.spec_from_file_location("_008_process", Path(__file__).parent / "008_process.py")
     _proc = _ilu.module_from_spec(_spec)
     _spec.loader.exec_module(_proc)
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[6]
+_PROJECT_ROOT = Path(__file__).parents[6]
 _DEFAULT_SESSION_BASE = _PROJECT_ROOT / "tmp" / "cim_log" / "video-tracking"
 
 _CJK_FONTS = [
@@ -251,7 +251,7 @@ def render_input() -> dict:
     )
 
     with st.expander("📖 使用說明", expanded=False):
-        _guide_path = Path(__file__).resolve().parent / "guide.html"
+        _guide_path = Path(__file__).parent / "guide.html"
         if _guide_path.exists():
             import streamlit.components.v1 as _components
             _components.html(_guide_path.read_text(encoding="utf-8"), height=800, scrolling=True)

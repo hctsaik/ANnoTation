@@ -9,7 +9,7 @@ import streamlit as st
 
 # ─── 動態載入 _config + _manifest_db ─────────────────────────────────────────
 
-_HERE = Path(__file__).resolve().parent
+_HERE = Path(__file__).parent
 
 _cfg_spec = _ilu.spec_from_file_location("_012_config", _HERE / "_config.py")
 _cfg = _ilu.module_from_spec(_cfg_spec)
