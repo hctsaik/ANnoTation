@@ -1375,8 +1375,11 @@ def render_output(result: dict) -> None:
                 st.session_state.pop("m012_cache_mid", None)
                 st.rerun()
     with _btn_update_c:
-        if st.button("➡️ 前往 Update", type="primary", key="m012_goto_update", use_container_width=True):
-            _post_message("SWITCH_TAB", {"plugin_id": "module_013", "tab": "input"})
+        if st.button("➡️ 前往 匯出 / 回傳", type="primary", key="m012_goto_update", use_container_width=True):
+            # 切到本 sheet 實際存在的「匯出 / 回傳」tab（module_014）。舊版指向 module_013
+            # （Sync Back），但它不在 annotation sheet 的 tab 列內，SWITCH_TAB 在 sheetTabs
+            # 找不到 → 按了沒反應。
+            _post_message("SWITCH_TAB", {"plugin_id": "module_014", "tab": "input"})
 
     if _folder_active:
         _enh_mode_active = bool(st.session_state.get("m012_folder_enhanced_mode", False))

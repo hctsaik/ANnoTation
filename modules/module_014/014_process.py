@@ -39,6 +39,41 @@ _PROJECT_ROOT = Path(__file__).parents[6]
 _CIM_LOG_DIR = Path(os.environ.get("CIM_LOG_DIR", str(_PROJECT_ROOT / "tmp" / "cim_log")))
 
 
+# ─── VisualLatent 單向交棒收尾 ────────────────────────────────────────────────
+
+def _retire_lv_handoffs() -> dict | None:
+    """One-way hand-over close-out. VisualLatent (LV) hands batches to Labeling
+    and does NOT track them back (no inbox in LV). When a batch reaches export
+    here, the LV-delegated work is done — so mark any still-open LV hand-off
+    batches as delivered in the shared on-disk registry. This (a) lets the
+    Source tab (module_026) stop re-suggesting an already-handled batch, and
+    (b) lets the output page show a 'done, no need to return to LV' close-out.
+
+    Frame-free: reads/writes <CIM_LOG_DIR>/lv_labeling_handoff/_pending.json
+    directly (no import coupling to the LV plugin). Idempotent. Returns the
+    newest retired batch (for the close-out message), or None if there was none.
+    """
+    reg = _CIM_LOG_DIR / "lv_labeling_handoff" / "_pending.json"
+    if not reg.exists():
+        return None
+    try:
+        data = json.loads(reg.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    open_rows = [v for v in data.values() if v.get("status") != "read_back"]
+    if not open_rows:
+        return None
+    for v in open_rows:
+        v["status"] = "read_back"
+    try:
+        tmp = reg.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(reg)
+    except OSError:
+        return None
+    return max(open_rows, key=lambda r: r.get("created_at", ""))
+
+
 # ─── 驗證 ─────────────────────────────────────────────────────────────────────
 
 class ValidationIssue(NamedTuple):
@@ -802,4 +837,7 @@ def execute_logic(params: dict) -> dict:
         return {**_base, "mode": "error", "error": f"匯出失敗：{exc}",
                 "export_paths": export_paths}
 
-    return {**_base, "mode": "done", "error": None, "export_paths": export_paths}
+    # 單向交棒收尾：匯出成功＝LV 交辦的這批已完成，標記已交付（讓 module_026 不再重複帶入）
+    lv_closed = _retire_lv_handoffs()
+    return {**_base, "mode": "done", "error": None, "export_paths": export_paths,
+            "lv_handoff_closed": lv_closed}

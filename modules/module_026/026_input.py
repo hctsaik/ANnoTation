@@ -57,11 +57,46 @@ def _browse_folder() -> str:
 
 # ─── 各模式 UI ────────────────────────────────────────────────────────────────
 
+def _peek_lv_handoff() -> dict | None:
+    """Newest not-yet-read VisualLatent (LV) hand-off batch, if any. Reads the
+    shared on-disk contract (<CIM_LOG_DIR>/lv_labeling_handoff/_pending.json)
+    directly — no import coupling to the LV plugin."""
+    import json
+    import os
+    from pathlib import Path
+    base = os.environ.get("CIM_LOG_DIR")
+    if not base:
+        return None
+    reg = Path(base) / "lv_labeling_handoff" / "_pending.json"
+    if not reg.exists():
+        return None
+    try:
+        data = json.loads(reg.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    rows = [dict(v, handoff_id=k) for k, v in data.items()
+            if v.get("status") != "read_back" and Path(v.get("images_dir", "")).exists()]
+    rows.sort(key=lambda r: r.get("created_at", ""), reverse=True)
+    return rows[0] if rows else None
+
+
 def _render_local(cfg: dict) -> dict:
     if "_026_folder_chosen" in st.session_state:
         st.session_state["m026_folder_path"] = st.session_state.pop("_026_folder_chosen")
     if "m026_folder_path" not in st.session_state:
         st.session_state["m026_folder_path"] = cfg.get("last_folder_path", "")
+
+    # VisualLatent (LV) hand-over: if LV just sent a batch here, auto-prefill its
+    # folder so the curator doesn't paste a path by hand.
+    _lv = _peek_lv_handoff()
+    if _lv and not st.session_state.get("m026_folder_path"):
+        st.session_state["m026_folder_path"] = _lv["images_dir"]
+        st.session_state["m026_recursive"] = False
+    if _lv:
+        st.info(f"🔬 偵測到來自 VisualLatent 的待標批次："
+                f"**{_lv.get('source')}** · 任務 {_lv.get('task')} · {_lv.get('n_total')} 張。"
+                "已自動帶入資料夾路徑，按下方「執行」載入後即可標註；"
+                "標完到「匯出 / 回傳」匯出即完成，不用回 VisualLatent。")
 
     path_col, btn_col = st.columns([5, 1])
     with path_col:

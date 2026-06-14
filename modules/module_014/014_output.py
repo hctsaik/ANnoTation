@@ -76,6 +76,14 @@ def render_output(result: dict) -> None:
     # ── 摘要 Metrics ─────────────────────────────────────────────────────────
     st.success("匯出完成！")
 
+    # 單向交棒收尾：若這批來自 VisualLatent，標註＋回饋到此即完成，不用回 LV
+    lv = result.get("lv_handoff_closed")
+    if lv:
+        st.success(
+            f"✅ 這批來自 VisualLatent 的交辦（{lv.get('source', '?')} · "
+            f"任務 {lv.get('task', '?')} · {lv.get('n_total', '?')} 張）"
+            "標註與回饋到此完成，已標記為已交付，**不用回 VisualLatent**。")
+
     total = result.get("total_items", 0)
     annotated = result.get("annotated_items", 0)
     classified = result.get("classified_items", 0)
