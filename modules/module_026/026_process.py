@@ -25,6 +25,7 @@ def _load(name: str, path: Path):
 
 _cfg  = _load("_026_config", _HERE / "_config.py")
 _mdb  = _load("_manifest_db", _HERE.parents[3] / "scripts" / "shared" / "_manifest_db.py")
+_base = _load("_config_base", _HERE.parents[3] / "scripts" / "shared" / "_config_base.py")
 _p010 = _load("_010_process", _HERE.parent / "module_010" / "010_process.py")
 
 
@@ -62,15 +63,51 @@ def _run_local(params: dict) -> dict:
     items      = _p010.scan_folder(folder_path, recursive, extensions)
     name       = params.get("manifest_name") or Path(folder_path).name or f"local_{datetime.now():%Y%m%d_%H%M%S}"
 
-    manifest_id = _save_manifest(items, name, "folder",
-                                  {"folder_path": folder_path, "recursive": recursive, "extensions": extensions})
+    # A YOLO subset handed over from LV (Export / Send-to-Labeling) carries boxes
+    # as labels/*.txt + classes.txt — NOT the per-image .json the workbench reads.
+    # Seed sibling X-AnyLabeling .json so the boxes (with correct class names) show
+    # up immediately, and surface the class list so module_012 defaults to it.
+    seed = _seed_yolo_boxes(folder_path)
+
+    src_cfg = {"folder_path": folder_path, "recursive": recursive, "extensions": extensions}
+    if seed.get("classes"):
+        src_cfg["classes"] = seed["classes"]
+    manifest_id = _save_manifest(items, name, "folder", src_cfg)
     _cfg.write_shared({
         "last_manifest_id": manifest_id,
         "source_type": "local",
         "pending_reload": False,
     })
     return {"mode": "ready", "manifest_id": manifest_id, "manifest_name": name,
-            "total_count": len(items), "items": items[:20], "error": None}
+            "total_count": len(items), "items": items[:20], "yolo_seed": seed,
+            "error": None}
+
+
+def _seed_yolo_boxes(folder_path: str) -> dict:
+    """If ``folder_path`` is a YOLO subset, write sibling X-AnyLabeling .json for
+    each image (so the annotation workbench shows the boxes) and push the class
+    list into module_012's config so its label set defaults correctly. Best-
+    effort: any failure is swallowed (ingestion must still succeed) and reported
+    in the returned dict."""
+    try:
+        from plugins.labeling.domain.yolo_xany_seed import (
+            looks_like_yolo_dir, seed_xany_json_from_yolo)
+        if not looks_like_yolo_dir(Path(folder_path)):
+            return {"applied": False, "reason": "not-a-yolo-dir"}
+        rep = seed_xany_json_from_yolo(folder_path).to_dict()
+        rep["applied"] = True
+        classes = rep.get("classes") or []
+        if classes:
+            # Default the workbench (module_012) label set to the dataset classes,
+            # keeping any other config keys intact.
+            # config_path() prepends "module_", so the id is the bare number.
+            cfg12 = _base.load_config("012", {})
+            if cfg12.get("annotation_labels") != classes:
+                cfg12["annotation_labels"] = classes
+                _base.save_config("012", cfg12)
+        return rep
+    except Exception as exc:  # noqa: BLE001 — never break ingestion on seed failure
+        return {"applied": False, "error": f"{type(exc).__name__}: {exc}"}
 
 
 def _run_remote(params: dict) -> dict:
