@@ -209,7 +209,10 @@ def import_labelme_project_dir(
     labels_path = Path(labels_dir)
     asset_by_filename = {Path(asset.uri).name: asset for asset in assets}
     _SKIP = {"manifest.json", "conversion_report.json"}
-    json_files = sorted(p for p in labels_path.glob("*.json") if p.name not in _SKIP)
+    # rglob (recursive): X-AnyLabeling/web/seeder all write sidecars NEXT TO the image,
+    # which for split layouts means under nested subfolders (images/train/x.json). A
+    # non-recursive glob would silently miss those — every nested sidecar unreadable.
+    json_files = sorted(p for p in labels_path.rglob("*.json") if p.name not in _SKIP)
 
     all_annotations: list[Annotation] = []
     aggregated = ConversionReport(source_format_version="labelme-5-compatible")

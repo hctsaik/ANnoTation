@@ -965,13 +965,40 @@ def _inject_img_click_zoom() -> None:
 """, height=0)
 
 
+def _inject_conn_resilience() -> None:
+    """連線健壯性（P5）：embedded Streamlit 的 websocket 在視窗縮放時偶爾短暫斷線並跳
+    「Connection error / server is not responding」。偵測到該提示時，溫和觸發 Streamlit
+    內建的自動重連（送 focus / visibilitychange），不重載、不丟工作台狀態、也不隱藏
+    持續性錯誤（若真的斷線，Streamlit 仍會持續顯示）。純前端、非破壞性。"""
+    components.html("""
+<script>
+(function(){
+  if (window.parent._m012_conn_fix) return;
+  window.parent._m012_conn_fix = true;
+  var d = window.parent.document;
+  function nudge(){
+    try { window.parent.dispatchEvent(new Event('focus')); } catch(e){}
+    try { d.dispatchEvent(new Event('visibilitychange')); } catch(e){}
+  }
+  function scan(){
+    var t = (d.body && d.body.innerText) || '';
+    if (t.indexOf('Connection error') >= 0 || t.indexOf('server is not responding') >= 0) { nudge(); }
+  }
+  try { new MutationObserver(scan).observe(d.body, {childList:true, subtree:true}); } catch(e){}
+  setInterval(scan, 3000);
+})();
+</script>
+""", height=0)
+
+
 def _zoomable_img_html(img_bytes: bytes, mime: str = "jpeg") -> str:
     """回傳帶有 m012-zoomable class 的 <img>，點擊由 MutationObserver 附加的 handler 放大。"""
     b64 = base64.b64encode(img_bytes).decode()
     return (
         f'<img src="data:image/{mime};base64,{b64}"'
         f' class="m012-zoomable"'
-        f' style="width:100%;max-height:52vh;object-fit:contain;border-radius:4px;display:block;"'
+        f' style="max-width:100%;max-height:82vh;width:auto;height:auto;object-fit:contain;'
+        f'border-radius:4px;display:block;margin:0 auto;"'
         f' title="點擊放大" />'
     )
 
@@ -1214,10 +1241,11 @@ def render_output(result: dict) -> None:
     # 注入鍵盤快捷鍵 + 圖片點擊放大
     _keyboard_listener()
     _inject_img_click_zoom()
+    _inject_conn_resilience()
 
     # ── CSS ──────────────────────────────────────────────────────────────────
     st.markdown("""<style>
-[data-testid='stImage'] img { max-height: 58vh; width: auto !important; object-fit: contain; }
+[data-testid='stImage'] img { max-height: 82vh; width: auto !important; object-fit: contain; }
 .thumb-selected { border: 3px solid #1a73e8 !important; border-radius: 6px; padding: 2px; }
 .m012-preview {
     display: none;
@@ -1432,8 +1460,16 @@ def render_output(result: dict) -> None:
     if "m012_selected_idx" not in st.session_state:
         st.session_state["m012_selected_idx"] = 0
 
+    # ── 版面比例（RWD）：固定 1:2 在寬螢幕會讓明細圖太小、左右浪費 → 讓使用者選 ──
+    _ratio_map = {"標準（1:2）": [1, 2], "大圖（1:4）": [1, 4], "並排（1:1）": [1, 1]}
+    _ratio_label = st.radio(
+        "版面", list(_ratio_map.keys()), horizontal=True,
+        key="m012_layout_ratio", label_visibility="collapsed",
+        help="寬螢幕用「大圖」讓明細影像佔更大寬度，不浪費左右空白。",
+    )
+
     # ── 主體：左右欄 ─────────────────────────────────────────────────────────
-    left_col, right_col = st.columns([1, 2], gap="medium")
+    left_col, right_col = st.columns(_ratio_map.get(_ratio_label, [1, 2]), gap="medium")
 
     # ════════════════════════════════════════════════════════════════
     # 左欄：圖片列表
@@ -1609,10 +1645,16 @@ def render_output(result: dict) -> None:
                 )
 
                 # 縮圖（點 ▶ 選取）| 標注縮圖 | 檔名 + 狀態 + 操作按鈕
-                thumb_c, ann_c, info_c = st.columns([1, 1, 3])
+                # P4(RWD)：清單窄（大圖模式）時收掉第二張縮圖；縮圖改隨欄寬縮放，
+                # 避免固定 120px 在窄欄溢出。
+                if _ratio_label == "大圖（1:4）":
+                    thumb_c, info_c = st.columns([1, 3])
+                    ann_c = None
+                else:
+                    thumb_c, ann_c, info_c = st.columns([1, 1, 3])
                 with thumb_c:
                     if thumb_bytes:
-                        st.image(thumb_bytes, width=120)
+                        st.image(thumb_bytes, use_container_width=True)
                     else:
                         st.caption("—")
                     # ▶ 選取按鈕放縮圖正下方
@@ -1625,12 +1667,13 @@ def render_output(result: dict) -> None:
                         st.session_state["m012_selected_idx"] = global_idx
                         st.rerun()
 
-                with ann_c:
-                    if ann_thumb_bytes:
-                        st.image(ann_thumb_bytes, width=120)
-                    elif has_ann:
-                        st.markdown('<span style="color:#94a3b8;font-size:10px">無框</span>',
-                                    unsafe_allow_html=True)
+                if ann_c is not None:
+                    with ann_c:
+                        if ann_thumb_bytes:
+                            st.image(ann_thumb_bytes, use_container_width=True)
+                        elif has_ann:
+                            st.markdown('<span style="color:#94a3b8;font-size:10px">無框</span>',
+                                        unsafe_allow_html=True)
 
                 with info_c:
                     if is_selected:
@@ -1952,15 +1995,20 @@ setTimeout(function() {
                     shapes = []
 
                 if shapes:
-                    orig_c, ann_c = st.columns(2)
-                    with orig_c:
+                    # 單張全寬顯示（不再左右切半 → 直幅圖不會被擠成細長條、橫向 letterbox）。
+                    # 用切換看「標注結果 / 原圖」，預設顯示標注結果（要複檢的框）。
+                    _view = st.radio(
+                        "檢視", ["標注結果", "原圖"], horizontal=True,
+                        key=f"m012_detail_view_{item_id}", label_visibility="collapsed",
+                    )
+                    if _view == "原圖":
                         st.caption("**原圖**（點擊放大）")
                         orig_full = _make_full_jpeg(fp)
                         if orig_full:
                             st.markdown(_zoomable_img_html(orig_full, "jpeg"), unsafe_allow_html=True)
                         else:
                             st.image(fp, use_container_width=True)
-                    with ann_c:
+                    else:
                         st.caption("**標注結果**（點擊放大）")
                         try:
                             _ann_mtime = Path(ann_path).stat().st_mtime if ann_path else 0.0

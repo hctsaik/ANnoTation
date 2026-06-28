@@ -31,8 +31,11 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-_IMG_EXTS = (".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff")
-_XANY_VERSION = "2.4.0"
+from plugins.labeling.domain.adapters.xany_sidecar import (
+    IMG_EXTS as _IMG_EXTS,
+    build_xany_json as _build_xany_json,
+    xany_shape,
+)
 
 
 @dataclass
@@ -132,32 +135,6 @@ def _yolo_to_rect(cx: float, cy: float, w: float, h: float, iw: int, ih: int
     return [[round(x1, 2), round(y1, 2)], [round(x2, 2), round(y2, 2)]]
 
 
-def _build_xany_json(image_name: str, iw: int, ih: int, shapes: list[dict]) -> dict:
-    return {
-        "version": _XANY_VERSION,
-        "flags": {},
-        "shapes": shapes,
-        "imagePath": image_name,
-        "imageData": None,
-        "imageHeight": ih,
-        "imageWidth": iw,
-    }
-
-
-def _shape(label: str, rect: list[list[float]]) -> dict:
-    return {
-        "label": label,
-        "score": None,
-        "points": rect,
-        "group_id": None,
-        "description": "",
-        "difficult": False,
-        "shape_type": "rectangle",
-        "flags": {},
-        "attributes": {},
-    }
-
-
 def _resolve_dirs(folder: Path) -> tuple[Path, Path]:
     """(images_dir, labels_dir). Supports the LV export layout
     (``<folder>/images`` + ``<folder>/labels``) and a flat folder."""
@@ -224,7 +201,7 @@ def seed_xany_json_from_yolo(folder: Path | str, *, overwrite: bool = False
                 rep.warnings.append(
                     f"{lbl.name}: class id {cls} >= {len(classes)} names; "
                     f"label kept as '{name}'")
-            shapes.append(_shape(name, _yolo_to_rect(cx, cy, bw, bh, iw, ih)))
+            shapes.append(xany_shape(name, _yolo_to_rect(cx, cy, bw, bh, iw, ih), "rectangle"))
         sidecar.write_text(
             json.dumps(_build_xany_json(img.name, iw, ih, shapes),
                        ensure_ascii=False, indent=2),
