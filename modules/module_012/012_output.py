@@ -227,74 +227,84 @@ def _find_annotation(img_path: str) -> tuple[bool, str, int]:
 PAGE_SIZE = 50
 
 
+def _dir_sidecar_index(db_items: list[dict]) -> dict[str, dict[str, float]]:
+    """``{影像目錄: {json檔名: mtime}}``——每個唯一目錄做一次 ``os.scandir``，取代
+    「每張圖一次 ``Path.stat()/exists()``」。大資料集(數千張)時，把每次 rerun /
+    autorefresh 的檔案系統工作從 O(N) 降為 O(目錄數)，避免主執行緒長時間卡住而讓
+    Streamlit websocket ping 逾時、跳「Connection error」。"""
+    dirs: set[str] = set()
+    for it in db_items:
+        fp = it.get("file_path", "")
+        if fp:
+            dirs.add(str(Path(fp).parent))
+    index: dict[str, dict[str, float]] = {}
+    for d in dirs:
+        m: dict[str, float] = {}
+        try:
+            with os.scandir(d) as sc:
+                for e in sc:
+                    if e.name.endswith(".json"):
+                        try:
+                            m[e.name] = e.stat().st_mtime  # scandir 已快取 stat，無額外 syscall
+                        except OSError:
+                            m[e.name] = 0.0
+        except OSError:
+            pass
+        index[d] = m
+    return index
+
+
 def _scan_items(db_items: list[dict]) -> tuple[list[dict], dict[str, float]]:
-    """Full scan — 首次載入或 manifest 換新時呼叫。"""
+    """Full scan — 首次載入或 manifest 換新時呼叫。用 scandir 索引，只對「真的有
+    sidecar」的圖讀 JSON(算 shape 數)；未標注圖零額外 I/O。"""
+    index = _dir_sidecar_index(db_items)
     items: list[dict] = []
     mtimes: dict[str, float] = {}
     for it in db_items:
         fp = it.get("file_path", "")
-        has_ann, ann_path, shape_count = _find_annotation(fp)
-        ann_mtime = 0.0
-        if ann_path:
-            try:
-                ann_mtime = Path(ann_path).stat().st_mtime
-            except Exception:
-                ann_mtime = 0.0
-            mtimes[ann_path] = ann_mtime
-        items.append({**it, "has_ann": has_ann, "ann_path": ann_path, "shape_count": shape_count, "ann_mtime": ann_mtime})
+        d = str(Path(fp).parent) if fp else ""
+        jname = Path(fp).stem + ".json" if fp else ""
+        if fp and jname in index.get(d, {}):
+            has_ann, ann_path, shape_count = _find_annotation(fp)
+            ann_mtime = index[d].get(Path(ann_path).name, 0.0) if ann_path else 0.0
+            if ann_path:
+                mtimes[ann_path] = ann_mtime
+        else:
+            has_ann, ann_path, shape_count, ann_mtime = False, "", 0, 0.0
+        items.append({**it, "has_ann": has_ann, "ann_path": ann_path,
+                      "shape_count": shape_count, "ann_mtime": ann_mtime})
     return items, mtimes
 
 
 def _incremental_refresh(
     cached: list[dict], mtimes: dict[str, float]
 ) -> tuple[list[dict], dict[str, float]]:
-    """每次 rerun 只做 stat() 比對，僅對變動的項目重讀 JSON。"""
+    """每次 rerun 只比對 mtime，僅對「sidecar 新增/變動/刪除」的項目重讀 JSON。
+    用 scandir 索引把 O(N) 的 stat() 降為 O(目錄數)，大資料集才不會卡住 server。"""
+    index = _dir_sidecar_index(cached)
     new_mtimes = dict(mtimes)
     for item in cached:
         fp = item.get("file_path", "")
         if not fp:
             continue
+        d = str(Path(fp).parent)
+        cur = index.get(d, {}).get(Path(fp).stem + ".json", -1.0)  # -1.0 = sidecar 不存在
         ann_path = item.get("ann_path", "")
-        if ann_path:
-            try:
-                mtime = Path(ann_path).stat().st_mtime
-            except FileNotFoundError:
-                mtime = -1.0
-            except Exception:
-                mtime = new_mtimes.get(ann_path, 0.0)
-            if mtime != new_mtimes.get(ann_path, -999.0):
-                has_ann, new_ap, sc = _find_annotation(fp)
-                item["has_ann"] = has_ann
-                item["ann_path"] = new_ap
-                item["shape_count"] = sc
-                if ann_path != new_ap:
-                    new_mtimes.pop(ann_path, None)
-                if new_ap:
-                    try:
-                        new_mtime = Path(new_ap).stat().st_mtime
-                    except Exception:
-                        new_mtime = 0.0
-                    new_mtimes[new_ap] = new_mtime
-                    item["ann_mtime"] = new_mtime
-                else:
-                    item["ann_mtime"] = 0.0
+        prev = new_mtimes.get(ann_path, -1.0) if ann_path else -1.0
+        if cur == prev:
+            continue  # 沒變就跳過(未標注圖恆走這條，零額外 I/O)
+        has_ann, new_ap, sc = _find_annotation(fp)
+        item["has_ann"] = has_ann
+        item["ann_path"] = new_ap
+        item["shape_count"] = sc
+        if ann_path and ann_path != new_ap:
+            new_mtimes.pop(ann_path, None)
+        if new_ap:
+            nm = index.get(d, {}).get(Path(new_ap).name, 0.0)
+            new_mtimes[new_ap] = nm
+            item["ann_mtime"] = nm
         else:
-            # 尚無標注：只檢查影像同目錄同名 JSON。
-            candidate = Path(fp).with_suffix(".json")
-            if candidate.exists():
-                has_ann, new_ap, sc = _find_annotation(fp)
-                item["has_ann"] = has_ann
-                item["ann_path"] = new_ap
-                item["shape_count"] = sc
-                if new_ap:
-                    try:
-                        new_mtime = Path(new_ap).stat().st_mtime
-                    except Exception:
-                        new_mtime = 0.0
-                    new_mtimes[new_ap] = new_mtime
-                    item["ann_mtime"] = new_mtime
-                else:
-                    item["ann_mtime"] = 0.0
+            item["ann_mtime"] = 0.0
     return cached, new_mtimes
 
 
@@ -1226,6 +1236,14 @@ def render_output(result: dict) -> None:
     autorefresh_enabled    = bool(result.get("autorefresh_enabled", cfg.get("autorefresh_enabled", True)))
     autorefresh_seconds    = int(result.get("autorefresh_seconds", cfg.get("autorefresh_seconds", 10)) or 10)
     autorefresh_seconds    = max(5, min(300, autorefresh_seconds))
+    # 大資料集自我調節：每隔 N 秒重掃整頁，圖太多時太頻繁會週期性卡住 server
+    # （Connection error）。用上一輪快取的張數把間隔拉長（首輪為 0→用預設，下一輪
+    # 即自動修正）。使用者仍可在 Input 頁手動設更長。
+    _n_items_cached = int(st.session_state.get("m012_item_count", 0))
+    if _n_items_cached > 4000:
+        autorefresh_seconds = max(autorefresh_seconds, 60)
+    elif _n_items_cached > 1000:
+        autorefresh_seconds = max(autorefresh_seconds, 30)
 
     if autorefresh_enabled:
         st_autorefresh(
@@ -1280,6 +1298,7 @@ def render_output(result: dict) -> None:
         db_items = result.get("items", [])
 
     items     = _get_items(manifest_id, db_items)
+    st.session_state["m012_item_count"] = len(items)  # 供下一輪 autorefresh 間隔自我調節
 
     # 強化圖模式 sync：把 enhanced_dir 內的標注 JSON 回寫到原圖目錄
     # 條件：折疊區 toggle 啟用 OR 已有強化圖 JSON 存在（即使 toggle off 也清理一次）
