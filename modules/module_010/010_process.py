@@ -39,13 +39,14 @@ _cfg_spec.loader.exec_module(_cfg)
 # ─── 內部輔助 ─────────────────────────────────────────────────────────────────
 
 def _md5_prefix(file_path: str, length: int = 16) -> str | None:
-    """計算檔案 MD5，回傳前 length 個字元，失敗回傳 None。"""
+    """檔案的快速指紋（大小 + mtime 的雜湊），回傳前 length 個字元，失敗回傳 None。
+
+    刻意**不讀整個檔案內容**：原本逐 64KB 讀完整檔算 MD5，掃描大資料夾(數千張)時
+    會讀上 GB、把同步的 ingest 請求卡死/逾時，導致 engine 重啟。``file_hash`` 在下游
+    僅作不透明識別字串(不做內容比對)，用 ``(size, mtime_ns)`` 已足夠且為 O(1) syscall。"""
     try:
-        h = hashlib.md5()
-        with open(file_path, "rb") as f:
-            for chunk in iter(lambda: f.read(65536), b""):
-                h.update(chunk)
-        return h.hexdigest()[:length]
+        stt = Path(file_path).stat()
+        return hashlib.md5(f"{stt.st_size}:{stt.st_mtime_ns}".encode()).hexdigest()[:length]
     except Exception:
         return None
 
