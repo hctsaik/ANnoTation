@@ -23,9 +23,11 @@ import base64
 import json
 from pathlib import Path
 
-# 隱藏控制項的哨兵字串(JS 在 parent document 用它找對應 widget)
-_PAYLOAD_LABEL = "__m012_canvas_payload__"
-_SAVE_LABEL = "__m012_canvas_save__"
+# 隱藏控制項的哨兵字串(JS 在 parent document 用它找對應 widget)。
+# ⚠️ 不可含 Markdown 特殊字元：st.button 的標籤會被當 Markdown 算繪，
+# `__x__` 會變成粗體並吃掉前後底線，使按鈕 textContent 與此字串對不上、JS 找不到按鈕。
+_PAYLOAD_LABEL = "m012CanvasPayloadBridge"
+_SAVE_LABEL = "m012CanvasSaveBridge"
 
 
 def _img_data_url(image_path: str) -> tuple[str, int, int]:
@@ -166,18 +168,25 @@ const CFG = __CFG__;
 
   // ── 存檔:把框回灌 parent 的隱藏 Streamlit widget(沿用 012 的 components.html 慣例)──
   document.getElementById('save').onclick=()=>{
-    const payload = JSON.stringify(boxes.map(b=>({label:b.label,x:b.x,y:b.y,w:b.w,h:b.h})));
+    // payload 帶 nonce：後端看到新 nonce 才寫檔（免隱藏按鈕、免時序競態）。
+    const payload = JSON.stringify({nonce: Date.now(), boxes: boxes.map(b=>({label:b.label,x:b.x,y:b.y,w:b.w,h:b.h}))});
     try{
       const pd = window.parent.document;
-      const ta = pd.querySelector('textarea[aria-label="'+CFG.payloadLabel+'"]');
+      const ta = pd.querySelector('input[aria-label="'+CFG.payloadLabel+'"]') || pd.querySelector('textarea[aria-label="'+CFG.payloadLabel+'"]');
       if(ta){
-        const setter = Object.getOwnPropertyDescriptor(window.parent.HTMLTextAreaElement.prototype,'value').set;
-        setter.call(ta, payload); ta.dispatchEvent(new Event('input',{bubbles:true}));
+        const proto = ta.tagName==='INPUT' ? window.parent.HTMLInputElement.prototype : window.parent.HTMLTextAreaElement.prototype;
+        const setter = Object.getOwnPropertyDescriptor(proto,'value').set;
+        ta.focus({preventScroll:true});
+        setter.call(ta, payload);
+        ta.dispatchEvent(new Event('input',{bubbles:true}));
+        ta.dispatchEvent(new Event('change',{bubbles:true}));
+        ta.blur();   // blur 才會把值 commit 給 Streamlit 後端
+        document.getElementById('status').textContent='已送出存檔…';
+      } else {
+        document.getElementById('status').style.color='#dc2626';
+        document.getElementById('status').textContent='找不到存檔橋接欄位';
       }
-      let clicked=false;
-      pd.querySelectorAll('button').forEach(btn=>{ if(!clicked && btn.textContent.indexOf(CFG.saveLabel)>=0){ clicked=true; setTimeout(()=>btn.click(),60); } });
-      document.getElementById('status').textContent='已送出存檔…';
-    }catch(err){ document.getElementById('status').style.color='#dc2626'; document.getElementById('status').textContent='存檔橋接失敗:'+err; }
+    }catch(err){ document.getElementById('status').style.color='#dc2626'; document.getElementById('status').textContent='存檔失敗:'+err; }
   };
 
   img.onload=()=>{ fit(); palette(); draw(); };
@@ -213,29 +222,32 @@ def render_canvas_editor(image_path: str, classes: list[str], *, key: str,
 
     data_url, iw, ih = _img_data_url(image_path)
 
-    payload = st.text_area(_PAYLOAD_LABEL, key=f"{key}_payload",
-                           label_visibility="collapsed")
+    payload = st.text_input(_PAYLOAD_LABEL, key=f"{key}_payload",
+                            label_visibility="collapsed")
     saved = False
-    if st.button(_SAVE_LABEL, key=f"{key}_save") and payload:
+    _nonce_key = f"{key}_last_nonce"
+    if payload:
         try:
-            boxes = json.loads(payload)
-            sidecar = canvas_boxes_to_sidecar(boxes, Path(image_path).name, iw, ih)
-            sidecar_path.write_text(
-                json.dumps(sidecar, ensure_ascii=False, indent=2), encoding="utf-8")
-            saved = True
-            st.toast(f"已存檔 {len(sidecar['shapes'])} 個框 → {sidecar_path.name}")
+            data = json.loads(payload)
+            _nonce = data.get("nonce")
+            _boxes = data.get("boxes", [])
+            # 只在看到「新的」nonce 時寫檔，避免每次 rerun 重複寫。
+            if _nonce and st.session_state.get(_nonce_key) != _nonce:
+                st.session_state[_nonce_key] = _nonce
+                sidecar = canvas_boxes_to_sidecar(_boxes, Path(image_path).name, iw, ih)
+                sidecar_path.write_text(
+                    json.dumps(sidecar, ensure_ascii=False, indent=2), encoding="utf-8")
+                saved = True
+                st.toast(f"已存檔 {len(sidecar['shapes'])} 個框 → {sidecar_path.name}")
         except Exception as exc:  # noqa: BLE001
             st.error(f"存檔失敗:{exc}")
 
     # 把回灌用的 text_area / button 在 parent document 收起來(沿用 012 hideGhosts 慣例)。
     components.html(
         "<script>(function(){var d=window.parent.document;function h(){"
-        "d.querySelectorAll('textarea[aria-label=\"" + _PAYLOAD_LABEL + "\"]').forEach("
-        "function(t){var w=t.closest('[data-testid=\"stTextArea\"]');"
-        "if(w)w.style.cssText='position:absolute;left:-9999px;height:0;overflow:hidden;';});"
-        "d.querySelectorAll('button').forEach(function(b){if(b.textContent.indexOf('"
-        + _SAVE_LABEL + "')>=0){var w=b.closest('[data-testid=\"stButton\"]');"
-        "if(w)w.style.cssText='position:absolute;left:-9999px;height:0;overflow:hidden;';}});}"
+        "d.querySelectorAll('input[aria-label=\"" + _PAYLOAD_LABEL + "\"]').forEach("
+        "function(t){var w=t.closest('[data-testid=\"stTextInput\"]');"
+        "if(w)w.style.cssText='position:absolute;left:-9999px;height:0;overflow:hidden;';});}"
         "h();new MutationObserver(h).observe(d.body,{childList:true,subtree:true});})();</script>",
         height=0)
 

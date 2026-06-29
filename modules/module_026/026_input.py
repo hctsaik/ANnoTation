@@ -330,8 +330,6 @@ def _render_iwsc() -> dict:
 
 def render_input() -> dict:
     _ui.inject_streamlit_zh_overrides()
-    st.title("📥 資料來源")
-    st.caption("選擇資料來源，建立標準化圖片清單（DatasetManifest）供後續標注使用。")
 
     cfg = _cfg.load_config()
 

@@ -60,6 +60,11 @@ _help_spec = _ilu.spec_from_file_location("_help", _HERE.parents[3] / "scripts" 
 _help = _ilu.module_from_spec(_help_spec)
 _help_spec.loader.exec_module(_help)
 
+# 網頁內建標注器（零依賴 Canvas）——讓使用者免開 X-AnyLabeling/LabelMe/ISAT。
+_canvas_spec = _ilu.spec_from_file_location("_012_canvas", _HERE / "_canvas_editor.py")
+_canvas = _ilu.module_from_spec(_canvas_spec)
+_canvas_spec.loader.exec_module(_canvas)
+
 # 016_process 是 lazy-loaded，只在按鈕按下時才 import，避免每次 rerun 重載
 
 
@@ -1094,7 +1099,7 @@ def _keyboard_listener() -> None:
         } else if (k === 'ArrowDown' || k === 'j' || k === 'J') {
             e.preventDefault(); clickByText('→ 下一張');
         } else if (k === 'a' || k === 'A') {
-            e.preventDefault(); clickByText('🖊 標注工具');
+            e.preventDefault(); clickByText('🖊');
         } else if (k === 'c' || k === 'C') {
             var inputs = d.querySelectorAll('input[type="checkbox"]');
             for (var inp of inputs) {
@@ -1288,6 +1293,14 @@ def render_output(result: dict) -> None:
     border-radius: 4px;
 }
 .m012-thumb:hover .m012-preview { display: block; }
+/* 隱形注入元件（autorefresh / 鍵盤快捷 / 點擊放大 / 連線韌性 / 幽靈按鈕）雖 height=0，
+   其外層 element 容器仍佔一個 flex gap 槽 → 在標題下方堆出大片空白。直接收掉容器，
+   iframe 仍會載入並執行其 JS（display:none 不影響已在 DOM 的 iframe 載入腳本）。 */
+[data-testid="stElementContainer"]:has(iframe[height="0"]) { display: none !important; }
+[data-testid="stElementContainer"]:has(iframe[title*="autorefresh" i]) { display: none !important; }
+/* 分隔線與收合區塊上下留白收緊，避免工作台堆出大片空白。 */
+hr, [data-testid="stDivider"] { margin: 0.45rem 0 !important; }
+[data-testid="stExpander"] { margin-top: 0 !important; margin-bottom: 0.25rem !important; }
 </style>""", unsafe_allow_html=True)
 
     # ── 標注狀態：session_state 快取 + mtime 增量更新 ─────────────────────────
@@ -1480,15 +1493,16 @@ def render_output(result: dict) -> None:
         st.session_state["m012_selected_idx"] = 0
 
     # ── 版面比例（RWD）：固定 1:2 在寬螢幕會讓明細圖太小、左右浪費 → 讓使用者選 ──
-    _ratio_map = {"標準（1:2）": [1, 2], "大圖（1:4）": [1, 4], "並排（1:1）": [1, 1]}
+    # 預設「大圖（1:4）」：以影像為主，清單收成窄側欄、明細影像佔最大寬度。
+    _ratio_map = {"大圖（1:4）": [1, 4], "標準（1:2）": [1, 2], "並排（1:1）": [1, 1]}
     _ratio_label = st.radio(
         "版面", list(_ratio_map.keys()), horizontal=True,
         key="m012_layout_ratio", label_visibility="collapsed",
-        help="寬螢幕用「大圖」讓明細影像佔更大寬度，不浪費左右空白。",
+        help="預設「大圖」以影像為主；要同時看更多縮圖可切「標準」或「並排」。",
     )
 
     # ── 主體：左右欄 ─────────────────────────────────────────────────────────
-    left_col, right_col = st.columns(_ratio_map.get(_ratio_label, [1, 2]), gap="medium")
+    left_col, right_col = st.columns(_ratio_map.get(_ratio_label, [1, 4]), gap="medium")
 
     # ════════════════════════════════════════════════════════════════
     # 左欄：圖片列表
@@ -1717,12 +1731,12 @@ def render_output(result: dict) -> None:
                     _item_enh_mode = _item_folder_active and bool(
                         st.session_state.get("m012_folder_enhanced_mode", False)
                     )
-                    btn_ann, btn_ai = st.columns(2)
+                    btn_ann, btn_ai, _btn_pad = st.columns([1, 1, 4])
                     with btn_ann:
                         if st.button(
-                            "🖊 標注工具",
+                            "🖊",
                             key=f"xany_{item['item_id']}",
-                            use_container_width=True,
+                            help="用標注工具開啟此張",
                         ):
                             st.session_state["m012_selected_idx"] = global_idx
                             if _item_folder_active:
@@ -1751,9 +1765,8 @@ def render_output(result: dict) -> None:
                             st.rerun()
                     with btn_ai:
                         if st.button(
-                            "⚡ AI 標注",
+                            "⚡",
                             key=f"ai_{item['item_id']}",
-                            use_container_width=True,
                             disabled=not bool(_ai_model),
                             help="對此張執行 AI 預標注" if _ai_model else "請先在頂部設定 AI 模型",
                         ):
@@ -2003,8 +2016,24 @@ setTimeout(function() {
                     )
 
             # 圖片顯示
+            _web_annot = st.toggle(
+                "✏️ 在網頁直接標注（畫框存回 sidecar，免開桌面工具）",
+                key="m012_webannot",
+                help="不需 X-AnyLabeling/LabelMe/ISAT：在這裡拖曳畫框、按 💾 存檔即寫回此圖標注。",
+            )
             if not fp or not Path(fp).exists():
                 st.warning(f"找不到影像：{fp}")
+            elif _web_annot:
+                if not labels:
+                    st.warning("請先在 Input 頁設定『標注類別』，網頁標注需要類別清單。")
+                else:
+                    st.caption(
+                        "**網頁標注**：拖曳畫框 · 數字鍵切類別 · Del 刪 · Ctrl+Z 復原 · 滾輪縮放 · 空白鍵拖曳平移"
+                    )
+                    if _canvas.render_canvas_editor(
+                        fp, labels, key=f"m012_canvas_{item_id}", height=620
+                    ):
+                        st.rerun()
             elif has_ann and ann_path:
                 try:
                     label_data = json.loads(Path(ann_path).read_text(encoding="utf-8"))

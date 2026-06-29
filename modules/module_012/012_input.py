@@ -105,31 +105,30 @@ def render_input() -> dict:
         "｜不是這批？請回 Data Feeder 重新選取。"
     )
 
-    # ── 標注類別 ──────────────────────────────────────────────────────────────
-    st.markdown("#### 標注類別")
-
+    # ── 標注類別（可收疊，與下方設定一致）────────────────────────────────────────
     if "m012_labels_raw" not in st.session_state:
         saved = cfg.get("annotation_labels", _DEFAULT_LABELS)
         st.session_state["m012_labels_raw"] = "\n".join(saved)
 
-    labels_raw = st.text_area(
-        "每行一個類別名稱",
-        key="m012_labels_raw",
-        height=120,
-        placeholder="例：scratch\ndent\nstain",
-        help="啟動標注工具時會載入這些類別，空白行會自動忽略。",
-    )
-    labels = _parse_lines(labels_raw)
-    duplicate_labels = _duplicate_labels(labels)
-    if labels:
-        st.success(
-            f"將建立 {len(labels)} 個標注類別：{', '.join(labels[:8])}"
-            + ("…" if len(labels) > 8 else "")
+    with st.expander("標注類別（必填）", expanded=True):
+        labels_raw = st.text_area(
+            "每行一個類別名稱",
+            key="m012_labels_raw",
+            height=120,
+            placeholder="例：scratch\ndent\nstain",
+            help="啟動標注工具時會載入這些類別，空白行會自動忽略。",
         )
-        if duplicate_labels:
-            st.warning(f"有重複類別：{', '.join(duplicate_labels[:5])}")
-    else:
-        st.warning("請先輸入標注工具中會使用的框選類別。")
+        labels = _parse_lines(labels_raw)
+        duplicate_labels = _duplicate_labels(labels)
+        if labels:
+            st.success(
+                f"將建立 {len(labels)} 個標注類別：{', '.join(labels[:8])}"
+                + ("…" if len(labels) > 8 else "")
+            )
+            if duplicate_labels:
+                st.warning(f"有重複類別：{', '.join(duplicate_labels[:5])}")
+        else:
+            st.warning("請先輸入標注工具中會使用的框選類別。")
 
     # ── 分類類別 ──────────────────────────────────────────────────────────────
     if "m012_clf_raw" not in st.session_state:
