@@ -68,3 +68,34 @@ def test_roundtrip_boxes_sidecar_boxes():
         assert orig["label"] == got["label"]
         for k in ("x", "y", "w", "h"):
             assert abs(orig[k] - got[k]) <= 0.5
+
+
+def test_save_preserves_score_and_nonrect_shapes():
+    # 資料完整性:人在網頁只改 bbox,不可洗掉同檔的 polygon/mask,也要保留信心值。
+    polygon = {"label": "road", "shape_type": "polygon",
+               "points": [[0, 0], [10, 0], [10, 10]], "score": None, "flags": {}}
+    boxes = [{"label": "cat", "x": 10, "y": 20, "w": 50, "h": 60, "score": 0.83},
+             {"label": "dog", "x": 100, "y": 100, "w": 30, "h": 30}]  # 人新畫:無 score
+    sc = canvas_boxes_to_sidecar(boxes, "f.jpg", 1920, 1080, keep_shapes=[polygon])
+    rects = [s for s in sc["shapes"] if s["shape_type"] == "rectangle"]
+    polys = [s for s in sc["shapes"] if s["shape_type"] == "polygon"]
+    assert polys == [polygon]                       # 非矩形原樣保留
+    cat = next(s for s in rects if s["label"] == "cat")
+    dog = next(s for s in rects if s["label"] == "dog")
+    assert cat["score"] == 0.83                      # AI 信心值沿用
+    assert dog["score"] is None                      # 新畫的框沒有 score
+
+
+def test_full_merge_roundtrip_keeps_polygon_and_score():
+    # 載入 (rect+score) + polygon → 編輯器讀 rect、抽出 polygon → 存回不丟東西。
+    original = {"shapes": [
+        {"label": "cat", "shape_type": "rectangle", "score": 0.9,
+         "points": [[10, 20], [60, 80]]},
+        {"label": "mask", "shape_type": "polygon", "points": [[0, 0], [5, 0], [5, 5]]},
+    ]}
+    boxes = sidecar_to_canvas_boxes(original)        # 編輯器只拿到矩形
+    keep = [s for s in original["shapes"] if s.get("shape_type") != "rectangle"]
+    sc = canvas_boxes_to_sidecar(boxes, "f.jpg", 1920, 1080, keep_shapes=keep)
+    labels = {s["label"]: s for s in sc["shapes"]}
+    assert "mask" in labels and labels["mask"]["shape_type"] == "polygon"
+    assert labels["cat"]["score"] == 0.9

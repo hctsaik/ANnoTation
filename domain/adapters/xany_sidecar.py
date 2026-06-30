@@ -12,11 +12,13 @@ XANY_VERSION = "2.4.0"
 IMG_EXTS = (".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff")
 
 
-def xany_shape(label: str, points: list[list[float]], shape_type: str = "rectangle") -> dict:
-    """一個 X-AnyLabeling 2.4.0 shape（rectangle = 2 對角點；polygon = 環點）。"""
+def xany_shape(label: str, points: list[list[float]], shape_type: str = "rectangle",
+               score: float | None = None) -> dict:
+    """一個 X-AnyLabeling 2.4.0 shape（rectangle = 2 對角點；polygon = 環點）。
+    ``score``=AI 預標信心值,人工新畫的框為 None(沿用既有框時保留原值)。"""
     return {
         "label": label,
-        "score": None,
+        "score": score,
         "points": points,
         "group_id": None,
         "description": "",

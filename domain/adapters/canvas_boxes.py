@@ -40,8 +40,14 @@ def sidecar_to_canvas_boxes(sidecar: dict) -> list[dict]:
 
 def canvas_boxes_to_sidecar(
     boxes: list[dict], image_name: str, image_width: int, image_height: int,
+    keep_shapes: list[dict] | None = None,
 ) -> dict:
-    """編輯器像素框 → X-AnyLabeling sidecar dict。clamp 到影像;退化框/空 label 丟掉。"""
+    """編輯器像素框 → X-AnyLabeling sidecar dict。clamp 到影像;退化框/空 label 丟掉。
+
+    ``keep_shapes``=既有 sidecar 中**非矩形**的形狀(polygon/mask 等),原樣保留並
+    接在編輯器矩形之後,確保「人在網頁只改 bbox」不會把同檔的遮罩/多邊形標註洗掉。
+    每框的 ``score``(信心值)若有帶入則沿用,新畫的框為 None。
+    """
     iw, ih = float(image_width), float(image_height)
     shapes: list[dict] = []
     for b in boxes:
@@ -53,6 +59,11 @@ def canvas_boxes_to_sidecar(
         label = str(b.get("label", "")).strip()
         if not label:
             continue
+        score = b.get("score")
+        try:
+            score = float(score) if score is not None else None
+        except (TypeError, ValueError):
+            score = None
         # 允許編輯器傳負寬高(往左上拖):用 min/max 正規化,再 clamp 到影像。
         x1 = max(0.0, min(x, x + w))
         y1 = max(0.0, min(y, y + h))
@@ -62,5 +73,7 @@ def canvas_boxes_to_sidecar(
             continue
         shapes.append(xany_shape(
             label, [[round(x1, 2), round(y1, 2)], [round(x2, 2), round(y2, 2)]],
-            "rectangle"))
+            "rectangle", score))
+    if keep_shapes:
+        shapes.extend(keep_shapes)
     return build_xany_json(image_name, int(iw), int(ih), shapes)
