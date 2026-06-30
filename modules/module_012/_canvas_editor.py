@@ -115,6 +115,8 @@ def editor_html(image_data_url: str, boxes: list[dict], classes: list[str],
     <span id="palette"></span>
     <span id="clsWrap"><input id="clsSearch" placeholder="搜尋類別… (↵指派)" autocomplete="off"><div id="clsMenu"></div></span>
     <span style="flex:1"></span>
+    <button id="prevImg" title="p / PageUp 上一張影像">◀</button>
+    <button id="nextImg" title="n / PageDown 下一張影像">▶</button>
     <button id="undo" title="Ctrl+Z 復原">↶</button>
     <button id="redo" title="Ctrl+Y / Ctrl+Shift+Z 重做">↷</button>
     <button id="fitbtn" title="f / 0 全圖">⤢</button>
@@ -409,6 +411,8 @@ const CFG = __CFG__;
     if(e.key==='z'||e.key==='Z'){ zoomToSel(); e.preventDefault(); return; }
     if(e.key==='l'||e.key==='L'){ toggleLabels(); e.preventDefault(); return; }
     if(e.key==='x'||e.key==='X'){ toggleCross(); e.preventDefault(); return; }
+    if(e.key==='n'||e.key==='N'||e.key==='PageDown'){ navImg(1); e.preventDefault(); return; }
+    if(e.key==='p'||e.key==='P'||e.key==='PageUp'){ navImg(-1); e.preventDefault(); return; }
     if(e.key>='1' && e.key<='9'){ const i=+e.key-1; if(i<classes.length) assignClass(classes[i]); e.preventDefault(); return; }
   });
   document.addEventListener('keyup', e=>{ if(e.code==='Space'){ spaceDown=false; cv.style.cursor='crosshair'; } });
@@ -431,8 +435,18 @@ const CFG = __CFG__;
     }catch(err){ statusEl.style.color='#dc2626'; statusEl.textContent='存檔失敗:'+err; }
   }
 
+  // 換圖:從 iframe 內點父頁面工作台「← 上一張 / → 下一張」幽靈按鈕(沿用 save bridge 同招)。
+  function navParent(dir){
+    try{ const pd=window.parent.document, needle = dir>0 ? '→ 下一張' : '← 上一張';
+      const bs=pd.querySelectorAll('button');
+      for(let i=0;i<bs.length;i++){ if(bs[i].textContent.trim().indexOf(needle)>=0){ bs[i].click(); return true; } }
+    }catch(e){} return false;
+  }
+  function navImg(dir){ if(dirty && !window.confirm('有未存檔的變更,確定要換圖?(取消後可先按 💾 存檔)')) return; navParent(dir); }
+
   $('undo').onclick=undo; $('redo').onclick=redoFn; $('fitbtn').onclick=resetFit; $('save').onclick=doSave;
   labelsBtn.onclick=toggleLabels; crossBtn.onclick=toggleCross; $('sweepBtn').onclick=sweepTiny;
+  $('prevImg').onclick=()=>navImg(-1); $('nextImg').onclick=()=>navImg(1);
 
   function resizeFrame(){ try{ const fe=window.frameElement;
     const vh=(window.parent && window.parent.innerHeight) || window.innerHeight || 700;
@@ -447,7 +461,8 @@ const CFG = __CFG__;
       toggleHidden:l=>{ if(hidden.has(l)) hidden.delete(l); else hidden.add(l); renderLegend(); draw(); },
       solo:l=>{ soloClass = soloClass===l?null:l; renderLegend(); draw(); },
       toggleLabels, toggleCrosshair:toggleCross, bringToFront, sendToBack, sweepTiny,
-      setClass:assignClass, order:()=>boxes.map(b=>b.label) } };
+      setClass:assignClass, order:()=>boxes.map(b=>b.label),
+      next:()=>navParent(1), prev:()=>navParent(-1) } };
   }catch(_){}
 
   img.onload=()=>{ palette(); renderLegend(); layout(); };

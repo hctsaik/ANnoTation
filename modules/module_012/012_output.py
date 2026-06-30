@@ -2068,12 +2068,21 @@ setTimeout(function() {
                 else:
                     if not labels:
                         st.caption(f"類別清單來自資料集（{len(_ed_labels)} 類）；可在 Input 頁覆寫。")
+                    _adv = st.checkbox(
+                        "💾 後自動跳下一張", key="m012_save_advance",
+                        help="按 💾 或 Ctrl+S 存檔後，自動切換到下一張影像（連續標注更快）。",
+                    )
                     st.caption(
-                        "**網頁標注**：拖曳畫框 · 數字鍵切類別 · Del 刪 · Ctrl+Z 復原 · 滾輪縮放 · 空白鍵拖曳平移"
+                        "**網頁標注**：拖把手改大小(Alt中心對稱) · 框內點選最小框 · 方向鍵微調 · "
+                        "Tab/[ ]切框 · +/-/z 縮放 · l 標籤 x 十字 · Ctrl+S 存檔 · ◀▶ 或 n/p 換圖"
                     )
                     if _canvas.render_canvas_editor(
                         fp, _ed_labels, key=f"m012_canvas_{item_id}", height=720
                     ):
+                        # 存檔已寫回「當前」影像;若開啟自動跳，存檔後再前進索引(無跨框時序風險)。
+                        if _adv and n_items > 1:
+                            st.session_state["m012_selected_idx"] = (sel_idx + 1) % n_items
+                            st.session_state["m012_kbd_nav"] = True
                         st.rerun()
             elif has_ann and ann_path:
                 try:
