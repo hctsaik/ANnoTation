@@ -1164,6 +1164,41 @@ def _check_pending_reload() -> bool:
         return False
 
 
+def _dataset_class_list(image_path: str) -> list[str]:
+    """Class list for the web canvas editor when none is configured on the Input
+    page. Prefer the dataset's YOLO class source (canonical id→name order, located
+    even when it sits in a sibling/ancestor folder); else fall back to the union
+    of labels already present in this folder's sidecars — so boxes the user can
+    SEE define the classes they can draw. [] only if neither exists."""
+    try:
+        img_dir = Path(image_path).parent
+        folder = img_dir.parent if img_dir.name.lower() == "images" else img_dir
+        try:
+            from plugins.labeling.domain.yolo_xany_seed import find_class_source
+            names = find_class_source(folder).names
+            if names:
+                return names
+        except Exception:
+            pass
+        # fallback: union of labels across sibling <image>.json sidecars (sorted
+        # base path is literal — bracketed folder names are safe for glob()).
+        seen: set[str] = set()
+        out: list[str] = []
+        for jp in sorted(img_dir.glob("*.json")):
+            try:
+                data = json.loads(jp.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            for sh in data.get("shapes", []):
+                lab = sh.get("label")
+                if lab and lab not in seen:
+                    seen.add(lab)
+                    out.append(lab)
+        return out
+    except Exception:
+        return []
+
+
 def render_output(result: dict) -> None:
     _help.render_help_button("module_012", "output", "🏷️ 標注進度")
     # 若 module_019 已下載新資料但 module_010 還沒重新載入，顯示警告並鎖定標注入口
@@ -2024,14 +2059,20 @@ setTimeout(function() {
             if not fp or not Path(fp).exists():
                 st.warning(f"找不到影像：{fp}")
             elif _web_annot:
-                if not labels:
+                # No class list configured? Derive one from the dataset (YOLO
+                # class file or the labels already in this folder's sidecars) so
+                # the editor works without a separate Input-page step.
+                _ed_labels = labels or _dataset_class_list(fp)
+                if not _ed_labels:
                     st.warning("請先在 Input 頁設定『標注類別』，網頁標注需要類別清單。")
                 else:
+                    if not labels:
+                        st.caption(f"類別清單來自資料集（{len(_ed_labels)} 類）；可在 Input 頁覆寫。")
                     st.caption(
                         "**網頁標注**：拖曳畫框 · 數字鍵切類別 · Del 刪 · Ctrl+Z 復原 · 滾輪縮放 · 空白鍵拖曳平移"
                     )
                     if _canvas.render_canvas_editor(
-                        fp, labels, key=f"m012_canvas_{item_id}", height=620
+                        fp, _ed_labels, key=f"m012_canvas_{item_id}", height=720
                     ):
                         st.rerun()
             elif has_ann and ann_path:

@@ -52,24 +52,37 @@ def editor_html(image_data_url: str, boxes: list[dict], classes: list[str],
     })
     # 純字串 + .replace 注入 cfg(非 f-string,所以 JS 單括號照原樣保留)。
     return """
-<div id="wrap" style="font-family:sans-serif;">
-  <div id="bar" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px;">
+<style>
+  html,body{height:100%;margin:0;padding:0;}
+  #wrap{display:flex;flex-direction:column;height:100%;box-sizing:border-box;
+        padding:4px 4px 0;font-family:sans-serif;
+        user-select:none;-webkit-user-select:none;}
+  #bar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px;flex:0 0 auto;}
+  /* holder 撐滿剩餘空間；canvas 在其中置中、依影像長寬比放到最大(影像佔滿 canvas)。 */
+  #holder{flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;
+          background:#0f172a;border:1px solid #cbd5e1;border-radius:6px;overflow:hidden;}
+  #cv{display:block;cursor:crosshair;touch-action:none;box-shadow:0 0 0 1px rgba(255,255,255,.25);border-radius:2px;}
+  #hint{font-size:11px;color:#94a3b8;margin:4px 0;flex:0 0 auto;}
+</style>
+<div id="wrap">
+  <div id="bar">
     <span style="font-size:12px;color:#475569;">類別(數字鍵切換):</span>
     <span id="palette"></span>
     <span style="flex:1"></span>
     <button id="undo" title="Ctrl+Z">↶ Undo</button>
+    <button id="fitbtn" title="重設縮放/置中">⤢ 全圖</button>
     <button id="save" style="background:#2563eb;color:#fff;border:0;padding:4px 12px;border-radius:4px;">💾 存檔</button>
     <span id="status" style="font-size:12px;color:#16a34a;"></span>
   </div>
-  <canvas id="cv" style="border:1px solid #cbd5e1;border-radius:4px;cursor:crosshair;width:100%;"></canvas>
-  <div style="font-size:11px;color:#94a3b8;margin-top:4px;">
-    拖曳空白處＝畫新框；點框選取後可拖曳/拉角縮放；Del 刪；滾輪縮放；空白鍵+拖曳平移。
-  </div>
+  <div id="holder"><canvas id="cv"></canvas></div>
+  <div id="hint">拖曳空白處＝畫新框；點框選取後可拖曳/拉角縮放；Del 刪；滾輪縮放；空白鍵+拖曳平移；⤢ 全圖復位。</div>
 </div>
 <script>
 const CFG = __CFG__;
 (function(){
   const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+  const holder = document.getElementById('holder');
+  const dpr = window.devicePixelRatio || 1;
   const img = new Image();
   let boxes = CFG.boxes.map(b => ({label:b.label, x:+b.x, y:+b.y, w:+b.w, h:+b.h}));
   let classes = CFG.classes.length ? CFG.classes : Array.from(new Set(boxes.map(b=>b.label))).filter(Boolean);
@@ -78,24 +91,36 @@ const CFG = __CFG__;
   const colors = ['#ef4444','#3b82f6','#22c55e','#f59e0b','#a855f7','#06b6d4','#ec4899','#84cc16'];
   const colorOf = name => colors[Math.max(0, classes.indexOf(name)) % colors.length];
 
-  let scale = 1, ox = 0, oy = 0;            // 視圖縮放/平移
+  let scale = 1, ox = 0, oy = 0;            // 影像→畫面 縮放 + 平移(CSS px)
+  let baseScale = 1, fitted = false;        // baseScale=全圖縮放;fitted=使用者是否手動縮放過
+  let cssW = 0, cssH = 0;                   // canvas 顯示尺寸(CSS px)
   let sel = -1, drag = null, panning = false, spaceDown = false;
   const hist = [];
   const snapshot = () => hist.push(JSON.stringify(boxes));
   const undo = () => { if(hist.length){ boxes = JSON.parse(hist.pop()); sel=-1; draw(); } };
 
-  function fit(){
-    const cssW = cv.clientWidth || 800;
-    scale = cssW / CFG.iw; ox = 0; oy = 0;
-    cv.width = cssW; cv.height = Math.round(CFG.ih * scale);
+  // canvas 依「可用空間 ∩ 影像長寬比」放到最大 → 影像填滿整個 canvas(不留內邊)。
+  // 量測 holder 的實際大小(非 img.onload 當下的暫時值),並由 ResizeObserver 在版面
+  // 安定/視窗縮放時重算,根治「iframe 初次量測太窄→影像縮成一小塊」的競態。
+  function layout(){
+    const availW = holder.clientWidth, availH = holder.clientHeight;
+    if(availW <= 0 || availH <= 0) return;
+    baseScale = Math.min(availW / CFG.iw, availH / CFG.ih);
+    cssW = Math.max(1, CFG.iw * baseScale);
+    cssH = Math.max(1, CFG.ih * baseScale);
+    cv.style.width = cssW + 'px'; cv.style.height = cssH + 'px';
+    cv.width = Math.round(cssW * dpr); cv.height = Math.round(cssH * dpr);
+    if(!fitted){ scale = baseScale; ox = 0; oy = 0; }  // 未手動縮放前一律貼齊全圖
+    draw();
   }
+  function resetFit(){ fitted = false; layout(); }
   const toImg = (px,py) => ({x:(px-ox)/scale, y:(py-oy)/scale});
   const toScr = (ix,iy) => ({x:ix*scale+ox, y:iy*scale+oy});
 
   function draw(){
-    ctx.setTransform(1,0,0,1,0,0);
-    ctx.clearRect(0,0,cv.width,cv.height);
-    ctx.drawImage(img, ox, oy, CFG.iw*scale, CFG.ih*scale);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.clearRect(0,0,cssW,cssH);
+    if(img.complete && img.naturalWidth) ctx.drawImage(img, ox, oy, CFG.iw*scale, CFG.ih*scale);
     boxes.forEach((b,i)=>{
       const p = toScr(b.x,b.y);
       ctx.lineWidth = i===sel?3:2; ctx.strokeStyle = colorOf(b.label);
@@ -130,30 +155,46 @@ const CFG = __CFG__;
   function hitCorner(b,m){ const c={x:b.x+b.w,y:b.y+b.h}; return Math.abs(m.x-c.x)<8/scale && Math.abs(m.y-c.y)<8/scale; }
   function hitBox(b,m){ return m.x>=b.x && m.x<=b.x+b.w && m.y>=b.y && m.y<=b.y+b.h; }
 
-  cv.addEventListener('mousedown', e=>{
+  // 滑過時的游標提示：角=縮放、框內=移動、空白=畫框/平移。
+  function cursorFor(m){
+    if(spaceDown) return panning ? 'grabbing' : 'grab';
+    if(sel>=0 && hitCorner(boxes[sel],m)) return 'nwse-resize';
+    for(let i=boxes.length-1;i>=0;i--){ if(hitBox(boxes[i],m)) return 'move'; }
+    return 'crosshair';
+  }
+  // Pointer Events + setPointerCapture：按下後把後續 move/up 鎖到 canvas，
+  // 游標移出畫布或移動很快也照樣跟住 → 拖曳穩定(舊版 mousemove 綁 cv 會掉事件)。
+  cv.addEventListener('pointerdown', e=>{
+    if(e.button!==0 && e.pointerType==='mouse') return;   // 只認左鍵
+    try{ cv.setPointerCapture(e.pointerId); }catch(_){}
     const r=cv.getBoundingClientRect(), m=toImg(e.clientX-r.left, e.clientY-r.top);
+    e.preventDefault();
     if(spaceDown){ panning={px:e.clientX,py:e.clientY,ox,oy}; return; }
     if(sel>=0 && hitCorner(boxes[sel],m)){ snapshot(); drag={mode:'resize',i:sel}; return; }
     for(let i=boxes.length-1;i>=0;i--){ if(hitBox(boxes[i],m)){ sel=i; snapshot(); drag={mode:'move',i,dx:m.x-boxes[i].x,dy:m.y-boxes[i].y}; palette(); draw(); return; } }
     snapshot(); boxes.push({label:curClass,x:m.x,y:m.y,w:0,h:0}); sel=boxes.length-1; drag={mode:'new',i:sel}; draw();
   });
-  cv.addEventListener('mousemove', e=>{
+  cv.addEventListener('pointermove', e=>{
     const r=cv.getBoundingClientRect();
     if(panning){ ox=panning.ox+(e.clientX-panning.px); oy=panning.oy+(e.clientY-panning.py); draw(); return; }
-    if(!drag) return;
-    const m=toImg(e.clientX-r.left, e.clientY-r.top), b=boxes[drag.i];
+    const m=toImg(e.clientX-r.left, e.clientY-r.top);
+    if(!drag){ cv.style.cursor=cursorFor(m); return; }
+    const b=boxes[drag.i];
     if(drag.mode==='new'||drag.mode==='resize'){ b.w=m.x-b.x; b.h=m.y-b.y; }
     else if(drag.mode==='move'){ b.x=m.x-drag.dx; b.y=m.y-drag.dy; }
     draw();
   });
-  window.addEventListener('mouseup', ()=>{
+  function endDrag(e){
+    if(e){ try{ cv.releasePointerCapture(e.pointerId); }catch(_){} }
     if(drag){ const b=boxes[drag.i]; if(b.w<0){b.x+=b.w;b.w=-b.w;} if(b.h<0){b.y+=b.h;b.h=-b.h;}
       if(b.w<3||b.h<3){ boxes.splice(drag.i,1); sel=-1; } draw(); }
     drag=null; panning=false;
-  });
+  }
+  cv.addEventListener('pointerup', endDrag);
+  cv.addEventListener('pointercancel', endDrag);
   cv.addEventListener('wheel', e=>{ e.preventDefault();
     const r=cv.getBoundingClientRect(), mx=e.clientX-r.left, my=e.clientY-r.top;
-    const f=e.deltaY<0?1.1:0.9, ni=toImg(mx,my); scale*=f;
+    const f=e.deltaY<0?1.1:0.9, ni=toImg(mx,my); scale*=f; fitted=true;  // 手動縮放後不再自動貼齊
     const np=toScr(ni.x,ni.y); ox+=mx-np.x; oy+=my-np.y; draw();
   }, {passive:false});
 
@@ -165,6 +206,7 @@ const CFG = __CFG__;
   });
   document.addEventListener('keyup', e=>{ if(e.code==='Space'){ spaceDown=false; cv.style.cursor='crosshair'; } });
   document.getElementById('undo').onclick=undo;
+  document.getElementById('fitbtn').onclick=resetFit;
 
   // ── 存檔:把框回灌 parent 的隱藏 Streamlit widget(沿用 012 的 components.html 慣例)──
   document.getElementById('save').onclick=()=>{
@@ -189,16 +231,31 @@ const CFG = __CFG__;
     }catch(err){ document.getElementById('status').style.color='#dc2626'; document.getElementById('status').textContent='存檔失敗:'+err; }
   };
 
-  img.onload=()=>{ fit(); palette(); draw(); };
+  // 讓 iframe 盡量吃滿瀏覽器視窗高度(components.html 預設固定高 → 影像被壓小)。
+  function resizeFrame(){
+    try{
+      const fe = window.frameElement;
+      const vh = (window.parent && window.parent.innerHeight) || window.innerHeight || 700;
+      if(fe){ fe.style.height = Math.max(420, Math.round(vh*0.82)) + 'px'; }
+    }catch(e){}
+  }
+
+  // 測試/E2E 用的唯讀狀態探針(無副作用):驗證拖曳是否真的改了框座標。
+  try{ window.__m012canvas = { state:()=>({boxes:boxes.map(b=>({...b})), sel, scale, ox, oy, cssW, cssH}) }; }catch(_){}
+
+  img.onload=()=>{ palette(); layout(); };
   img.src=CFG.img;
-  window.addEventListener('resize', ()=>{ fit(); draw(); });
+  // 版面安定 / 視窗縮放即重算(根治「初次量測太窄」競態);手動縮放後保留使用者視圖。
+  if(window.ResizeObserver){ new ResizeObserver(()=>layout()).observe(holder); }
+  window.addEventListener('resize', ()=>{ resizeFrame(); layout(); });
+  resizeFrame();
 })();
 </script>
 """.replace("__CFG__", cfg)
 
 
 def render_canvas_editor(image_path: str, classes: list[str], *, key: str,
-                         height: int = 640) -> bool:
+                         height: int = 720) -> bool:
     """在 Streamlit 渲染編輯器;存檔時寫回 sidecar。回傳 True 表示本次有存檔。
 
     需要 streamlit(由呼叫端 module_012 提供)。隱藏 widget 接住瀏覽器端回灌。
