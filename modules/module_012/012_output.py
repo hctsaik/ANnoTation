@@ -1712,7 +1712,8 @@ hr, [data-testid="stDivider"] { margin: 0.45rem 0 !important; }
                     if has_ann and item["ann_path"] else None
                 )
 
-                # 縮圖（點 ▶ 選取）| 標注縮圖 | 檔名 + 狀態 + 操作按鈕
+                # 縮圖本身可點選(縮圖上疊一顆透明按鈕)| 標注縮圖 | 檔名 + 操作按鈕
+                # 選取狀態與是否已標注都改成縮圖上的視覺標記,不再用獨立文字列。
                 # P4(RWD)：清單窄（大圖模式）時收掉第二張縮圖；縮圖改隨欄寬縮放，
                 # 避免固定 120px 在窄欄溢出。
                 if _ratio_label == "大圖（1:4）":
@@ -1721,19 +1722,67 @@ hr, [data-testid="stDivider"] { margin: 0.45rem 0 !important; }
                 else:
                     thumb_c, ann_c, info_c = st.columns([1, 1, 3])
                 with thumb_c:
-                    if thumb_bytes:
-                        st.image(thumb_bytes, use_container_width=True)
-                    else:
-                        st.caption("—")
-                    # ▶ 選取按鈕放縮圖正下方
-                    if st.button(
-                        "▶ 選取" if not is_selected else "● 已選",
-                        key=f"sel_{item['item_id']}",
-                        type="primary" if is_selected else "secondary",
-                        use_container_width=True,
-                    ):
-                        st.session_state["m012_selected_idx"] = global_idx
-                        st.rerun()
+                    _card_key = f"m012_card_{page}_{vis_i}"
+                    with st.container(key=_card_key):
+                        if thumb_bytes:
+                            st.image(thumb_bytes, use_container_width=True)
+                        else:
+                            st.caption("—")
+                        _sel_help = fname + ("（已標注 %d 個 shape）" % shape_count if has_ann else "（待標注）")
+                        if st.button("選取", key=f"sel_{item['item_id']}", help=_sel_help):
+                            st.session_state["m012_selected_idx"] = global_idx
+                            st.rerun()
+                    # Streamlit 的 CSS class 選擇器打不贏它自己內建元件的樣式(實測 st-key-*
+                    # 的 position/width 規則沒有生效),改用跟 _canvas_editor.py 隱藏 ghost
+                    # widget 同一招:從 components.html 的 iframe 反查 parent document,
+                    # 直接用 JS 對真實 DOM 元素設 inline style + 綁 click 轉發,不跟 Streamlit
+                    # 的樣式表打特異度的仗。MutationObserver 讓 rerun 後(DOM 換掉)還能重綁。
+                    components.html(
+                        f"""<script>(function() {{
+                        function apply() {{
+                            var doc = window.parent.document;
+                            var card = doc.querySelector('.st-key-{_card_key}');
+                            if (!card) return false;
+                            var img = card.querySelector('img');
+                            var btnWrap = card.querySelector('[data-testid="stButton"]');
+                            var btn = btnWrap ? btnWrap.querySelector('button') : null;
+                            if (!img || !btn) return false;
+                            card.style.position = 'relative';
+                            img.style.cursor = 'pointer';
+                            img.style.borderRadius = '6px';
+                            img.style.outline = {('"3px solid #1a73e8"' if is_selected else '""')};
+                            img.style.outlineOffset = '-3px';
+                            btnWrap.style.cssText =
+                                'position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;';
+                            if (!img.dataset.m012Bound) {{
+                                img.dataset.m012Bound = '1';
+                                img.addEventListener('click', function() {{ btn.click(); }});
+                            }}
+                            var badge = card.querySelector('.m012-thumb-badge');
+                            if ({str(has_ann).lower()}) {{
+                                if (!badge) {{
+                                    badge = doc.createElement('div');
+                                    badge.className = 'm012-thumb-badge';
+                                    badge.textContent = '\\u2713';
+                                    badge.style.cssText = 'position:absolute;top:6px;right:6px;' +
+                                        'width:18px;height:18px;border-radius:50%;background:#16a34a;' +
+                                        'color:#fff;font-size:11px;font-weight:700;display:flex;' +
+                                        'align-items:center;justify-content:center;pointer-events:none;z-index:6;';
+                                    card.appendChild(badge);
+                                }}
+                            }} else if (badge) {{
+                                badge.remove();
+                            }}
+                            return true;
+                        }}
+                        if (!apply()) {{
+                            var obs = new MutationObserver(function() {{ if (apply()) obs.disconnect(); }});
+                            obs.observe(window.parent.document.body, {{childList: true, subtree: true}});
+                            setTimeout(function() {{ obs.disconnect(); }}, 6000);
+                        }}
+                        }})();</script>""",
+                        height=0,
+                    )
 
                 if ann_c is not None:
                     with ann_c:
@@ -1755,9 +1804,8 @@ hr, [data-testid="stDivider"] { margin: 0.45rem 0 !important; }
 
                     item_id    = item.get("item_id", "")
                     clf_label  = classifications.get(item_id, "")
-                    ann_status = f"✅ 已標注　{shape_count} 個 shape" if has_ann else "⏳ 待標注"
-                    clf_status = f"　🏷 {clf_label}" if clf_label else ""
-                    st.caption(f"{ann_status}{clf_status}")
+                    if clf_label:
+                        st.caption(f"🏷 {clf_label}")
 
                     # 兩個操作按鈕：🖊 標注工具 | ⚡ AI 標注
                     _item_folder_active = _proc_alive(
