@@ -10,9 +10,8 @@ from pathlib import Path
 
 import streamlit as st
 
-_PROJECT_ROOT = Path(__file__).parents[6]
-
 _HERE = Path(__file__).parent
+_PROJECT_ROOT = Path(__file__).parents[6]
 
 _help_spec = importlib.util.spec_from_file_location("_help", _HERE.parents[3] / "scripts" / "shared" / "_help.py")
 _help = importlib.util.module_from_spec(_help_spec)
@@ -35,10 +34,20 @@ _BORDER_WIDTH = 5
 
 import datetime as _dt
 
-_REVIEWER_ID = "HCTSAIK"
+
+def _current_reviewer() -> str:
+    """目前的作業系統登入帳號。之前這裡寫死單一開發者姓名縮寫,多人共用同一份
+    review 記錄時完全看不出誰核准的。平台的 RBAC 是角色制(admin/operator/viewer
+    共用)，反而分不出「哪一個人」，OS 帳號對「誰核准了這張圖」這種用途更準；
+    Labeling 是獨立套件，架構契約禁止直接 import 平台的 auth_provider，用 OS
+    環境變數是不越界的作法。"""
+    return os.environ.get("USERNAME") or os.environ.get("USER") or "unknown"
+
+
 _REVIEW_STATUSES = ("approved", "rejected", "pending")
 _STATUS_COLOR = {"approved": (0, 180, 0, 255), "rejected": (200, 40, 40, 255)}
 _STATUS_ICON = {"approved": "✅", "rejected": "❌", "pending": "⏳"}
+_STATUS_LABEL = {"approved": "已核准", "rejected": "已退回", "pending": "待審查"}
 
 
 def _review_path(file_path: str) -> Path:
@@ -60,7 +69,7 @@ def _set_review(file_path: str, status: str, comment: str = "") -> None:
     data = {
         "status": status,
         "comment": comment,
-        "reviewer": _REVIEWER_ID,
+        "reviewer": _current_reviewer(),
         "timestamp": _dt.datetime.now().isoformat(timespec="seconds"),
     }
     tmp = rp.with_suffix(".tmp")
@@ -235,6 +244,7 @@ def _get_items(result: dict) -> list[dict]:
         and st.session_state.get("m018_cache_mid") == mid
         and st.session_state.get("m018_cache_filter") == result.get("filter")
         and st.session_state.get("m018_cache_label") == result.get("label_filter")
+        and st.session_state.get("m018_cache_review") == result.get("review_filter")
     ):
         return cached
 
@@ -243,12 +253,14 @@ def _get_items(result: dict) -> list[dict]:
         "manifest_id": mid,
         "filter": result.get("filter", "全部"),
         "label_filter": result.get("label_filter", ""),
+        "review_filter": result.get("review_filter", "全部"),
     })
     items = fresh.get("items", [])
     st.session_state["m018_items_cache"] = items
     st.session_state["m018_cache_mid"] = mid
     st.session_state["m018_cache_filter"] = result.get("filter")
     st.session_state["m018_cache_label"] = result.get("label_filter")
+    st.session_state["m018_cache_review"] = result.get("review_filter")
     return items
 
 
@@ -256,9 +268,9 @@ PAGE_SIZE = 30
 
 
 def render_output(result: dict) -> None:
-    _help.render_help_button("module_018", "output", "🖼️ Review Gallery")
+    _help.render_help_button("module_018", "output", "🖼️ Review Gallery — 標注審查")
     if not result or result.get("error"):
-        st.info("請先在 Input 頁籤確認設定，然後按下 ▶ 執行。")
+        st.info("正在準備審核清單；若未自動更新，請按上方「更新審核清單」。")
         if result and result.get("error"):
             st.error(result["error"])
         return
@@ -274,6 +286,7 @@ def render_output(result: dict) -> None:
 
     # ── 摘要 ─────────────────────────────────────────────────────────────────
     st.subheader("🖼️ Review Gallery")
+    st.caption(f"目前審核者：{_current_reviewer()} · 每次核准或退回都會記錄人員與時間")
     total_raw = result.get("total_raw", len(items))
     has_bbox = sum(1 for it in items if it["has_bbox"])
     approved_n = sum(1 for it in items if _get_review_status(it["file_path"]) == "approved")
@@ -298,11 +311,11 @@ def render_output(result: dict) -> None:
 
     if n_pages > 1:
         pg_cols = st.columns([1, 3, 1])
-        if pg_cols[0].button("◀ 上頁", disabled=page == 0, key="m018_prev"):
+        if pg_cols[0].button("← 上一頁", disabled=page == 0, key="m018_prev"):
             st.session_state["m018_page"] = page - 1
             st.rerun()
         pg_cols[1].caption(f"第 {page + 1} / {n_pages} 頁")
-        if pg_cols[2].button("下頁 ▶", disabled=page == n_pages - 1, key="m018_next"):
+        if pg_cols[2].button("下一頁 →", disabled=page == n_pages - 1, key="m018_next"):
             st.session_state["m018_page"] = page + 1
             st.rerun()
 
@@ -340,7 +353,8 @@ def render_output(result: dict) -> None:
                 rev = _get_review(sel_item["file_path"])
                 rev_status = rev.get("status", "pending")
                 status_icon = _STATUS_ICON.get(rev_status, "⏳")
-                st.markdown(f"**QA 狀態**：{status_icon} {rev_status}")
+                status_label = _STATUS_LABEL.get(rev_status, rev_status)
+                st.markdown(f"**QA 狀態**：{status_icon} {status_label}")
                 if rev.get("comment"):
                     st.caption(f"備註：{rev['comment']}")
                 if rev.get("reviewer"):
@@ -359,12 +373,22 @@ def render_output(result: dict) -> None:
                     st.session_state.pop("m018_items_cache", None)
                     st.rerun()
                 if qa_c3.button("↩️ 重置", key="m018_reset_review"):
-                    rp = _review_path(sel_item["file_path"])
-                    if rp.exists():
-                        rp.unlink()
-                    _overlay_cache.clear()
-                    st.session_state.pop("m018_items_cache", None)
+                    st.session_state["m018_reset_confirm"] = sel_item["item_id"]
                     st.rerun()
+                if st.session_state.get("m018_reset_confirm") == sel_item["item_id"]:
+                    st.warning("確定要清除這張圖的核准／退回狀態嗎？此動作無法復原。")
+                    rc1, rc2 = st.columns(2)
+                    if rc1.button("是，重置", key="m018_reset_confirm_yes", type="primary"):
+                        rp = _review_path(sel_item["file_path"])
+                        if rp.exists():
+                            rp.unlink()
+                        st.session_state.pop("m018_reset_confirm", None)
+                        _overlay_cache.clear()
+                        st.session_state.pop("m018_items_cache", None)
+                        st.rerun()
+                    if rc2.button("取消", key="m018_reset_confirm_no"):
+                        st.session_state.pop("m018_reset_confirm", None)
+                        st.rerun()
             if st.button("✕ 關閉詳細檢視", key="m018_close_detail"):
                 st.session_state.pop("m018_selected", None)
                 st.rerun()

@@ -30,7 +30,7 @@ def render_input() -> dict:
     manifests = _mdb.list_manifests(db_path)
 
     if not manifests:
-        st.warning("尚未建立任何 Manifest，請先執行 **010 - Data Feeder**。")
+        st.warning("尚未建立任何資料集，請先到 Annotation App 的「資料來源」。")
         return {"manifest_id": ""}
 
     shared_id = _cfg.get_shared_manifest_id()
@@ -43,7 +43,7 @@ def render_input() -> dict:
 
     st.info(
         f"📦 **{selected['name']}**　{selected.get('item_count', 0)} 張　"
-        f"｜　若要切換請回 Data Feeder 重新執行"
+        f"｜　可從 Annotation App 的「資料來源」切換"
     )
 
     return {"manifest_id": manifest_id}

@@ -48,7 +48,7 @@ def _classify_item(ann: dict | None) -> dict:
     }
 
 
-def _passes_filter(info: dict, filter_val: str, label_filter: str) -> bool:
+def _passes_filter(info: dict, filter_val: str, label_filter: str, review_filter: str = "全部") -> bool:
     if filter_val == "已標注 (有 BBox)" and not info["has_bbox"]:
         return False
     if filter_val == "未標注" and info["has_bbox"]:
@@ -60,7 +60,19 @@ def _passes_filter(info: dict, filter_val: str, label_filter: str) -> bool:
     if label_filter:
         if label_filter not in info.get("labels", []):
             return False
+    expected_review = {"待審查": "pending", "已核准": "approved", "已退回": "rejected"}.get(review_filter)
+    if expected_review and info.get("review_status") != expected_review:
+        return False
     return True
+
+
+def _review_status(file_path: str) -> str:
+    review_path = Path(file_path).parent / (Path(file_path).name + ".review.json")
+    try:
+        status = json.loads(review_path.read_text(encoding="utf-8")).get("status", "pending")
+        return status if status in {"pending", "approved", "rejected"} else "pending"
+    except Exception:
+        return "pending"
 
 
 def execute_logic(params: dict) -> dict:
@@ -73,13 +85,17 @@ def execute_logic(params: dict) -> dict:
 
     filter_val = params.get("filter", "全部")
     label_filter = params.get("label_filter", "").strip()
+    review_filter = params.get("review_filter", "全部")
+    cols_count = params.get("cols_count", 3)
+    show_overlay = params.get("show_overlay", True)
 
     enriched = []
     for it in raw_items:
         fp = it.get("file_path", "")
         ann = _read_annotation(fp)
         info = _classify_item(ann)
-        if not _passes_filter(info, filter_val, label_filter):
+        info["review_status"] = _review_status(fp)
+        if not _passes_filter(info, filter_val, label_filter, review_filter):
             continue
         enriched.append({
             "item_id": it["item_id"],
@@ -91,6 +107,7 @@ def execute_logic(params: dict) -> dict:
             "shape_count": info["shape_count"],
             "classification": info.get("classification", ""),
             "ann_path": str(Path(fp).with_suffix(".json")) if fp else "",
+            "review_status": info["review_status"],
         })
 
     total = len(raw_items)
@@ -102,4 +119,7 @@ def execute_logic(params: dict) -> dict:
         "total_raw": total,
         "filter": filter_val,
         "label_filter": label_filter,
+        "review_filter": review_filter,
+        "cols_count": cols_count,
+        "show_overlay": show_overlay,
     }

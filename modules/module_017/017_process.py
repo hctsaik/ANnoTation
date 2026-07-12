@@ -23,13 +23,14 @@ _cfg_spec = _ilu.spec_from_file_location("_017_config", _HERE / "_config.py")
 _cfg = _ilu.module_from_spec(_cfg_spec)
 _cfg_spec.loader.exec_module(_cfg)
 
-from plugins.labeling.domain.label_ops import (
-    delete_label,
-    find_near_duplicates,
-    merge_labels,
-    rename_label,
-    scan_labels,
-)
+try:
+    from plugins.labeling.domain.label_ops import (
+        delete_label, find_near_duplicates, merge_labels, rename_label, scan_labels,
+    )
+except ModuleNotFoundError:  # legacy runtime during the standalone-app migration
+    from cim_annotation.label_ops import (
+        delete_label, find_near_duplicates, merge_labels, rename_label, scan_labels,
+    )
 
 
 def _scan_annotations(items: list[dict]) -> dict:

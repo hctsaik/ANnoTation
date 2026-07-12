@@ -16,6 +16,10 @@ _mdb_spec = _ilu.spec_from_file_location("_manifest_db", _HERE.parents[3] / "scr
 _mdb = _ilu.module_from_spec(_mdb_spec)
 _mdb_spec.loader.exec_module(_mdb)
 
+_help_spec = _ilu.spec_from_file_location("_help", _HERE.parents[3] / "scripts" / "shared" / "_help.py")
+_help = _ilu.module_from_spec(_help_spec)
+_help_spec.loader.exec_module(_help)
+
 _SOURCE_ICON = {"local": "📁", "iwsc": "🔌"}
 _SOURCE_NAME = {"local": "本地資料夾", "iwsc": "外部任務系統"}
 
@@ -44,9 +48,19 @@ def _render_thumb_grid(items: list[dict]) -> None:
         with cols[i % _THUMB_COLS]:
             thumb = _thumb(fp) if fp else None
             if thumb:
-                st.image(thumb, caption=fname, width=140)
+                st.image(thumb, caption=fname, use_container_width=True)
             else:
                 st.caption(f"⚠️ {fname}")
+
+
+def _render_empty_warning(name: str, source_name: str) -> None:
+    """0 張圖片時的引導訊息：明確告知「沒有東西」，而不是誤導性的成功／
+    請去標注訊息（該資料夾/資料集其實沒有任何圖可標）。"""
+    st.warning(
+        f"⚠️ **{name}**　（來源：{source_name}）掃描完成，但找不到任何符合條件的圖片。\n\n"
+        "請確認：資料夾路徑是否正確、圖片副檔名是否包含在「允許的圖片副檔名」清單中、"
+        "若圖片在子資料夾裡請勾選「遞迴掃描子資料夾」。"
+    )
 
 
 def _render_status(manifest_id: str, source_type: str, shared: dict, manifest: dict | None) -> None:
@@ -54,8 +68,12 @@ def _render_status(manifest_id: str, source_type: str, shared: dict, manifest: d
         return
     icon = _SOURCE_ICON.get(source_type, "📦")
     name = _SOURCE_NAME.get(source_type, source_type)
+    item_count = manifest.get("item_count", 0)
+    if item_count == 0:
+        _render_empty_warning(manifest["name"], name)
+        return
     st.success(
-        f"{icon} **{manifest['name']}**　共 {manifest.get('item_count', 0)} 張圖片\n\n"
+        f"{icon} **{manifest['name']}**　共 {item_count} 張圖片\n\n"
         f"來源：{name}"
     )
     if source_type == "iwsc":
@@ -66,6 +84,7 @@ def _render_status(manifest_id: str, source_type: str, shared: dict, manifest: d
 
 
 def render_output(result: dict) -> None:
+    _help.render_help_button("module_026", "output", "📥 資料來源 — 結果說明")
     mode = result.get("mode", "idle")
 
     if mode == "error":
@@ -107,6 +126,10 @@ def render_output(result: dict) -> None:
 
         icon = _SOURCE_ICON.get(source_type, "📦")
         name = _SOURCE_NAME.get(source_type, source_type)
+
+        if total == 0:
+            _render_empty_warning(manifest_name, name)
+            return
 
         st.success(
             f"{icon} **{manifest_name}** 已載入！　來源：{name}　共 **{total}** 張圖片\n\n"

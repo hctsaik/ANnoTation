@@ -55,11 +55,15 @@ def render_output(result: dict) -> None:
     mode = result.get("mode", "idle")
 
     if mode == "idle":
-        st.info("尚未執行匯出，請在左側設定格式與目錄後按下「▶ 執行」。")
+        st.info("請確認上方的格式與輸出目錄，然後按下「建立匯出」。")
         return
 
     if mode == "error":
         st.error(f"匯出失敗：{result.get('error', '未知錯誤')}")
+        return
+
+    if mode == "not_implemented":
+        st.warning(result.get("error", "此功能尚未實作。"))
         return
 
     if mode == "validation_error":
@@ -73,8 +77,15 @@ def render_output(result: dict) -> None:
         _render_validation_issues(issues)
         st.divider()
 
+    export_paths: dict = result.get("export_paths", {})
+
     # ── 摘要 Metrics ─────────────────────────────────────────────────────────
-    st.success("匯出完成！")
+    # 曾經：沒選任何格式時,export_paths 是空的,卻仍顯示「匯出完成！」,使用者以為
+    # 匯出了東西,實際上什麼檔案都沒產生。
+    if export_paths:
+        st.success("匯出完成！")
+    else:
+        st.warning("沒有選擇任何匯出格式，本次未產生檔案。請在上方勾選至少一種格式後重試。")
 
     # 單向交棒收尾：若這批來自 VisualLatent，標註＋回饋到此即完成，不用回 LV
     lv = result.get("lv_handoff_closed")
@@ -124,7 +135,6 @@ def render_output(result: dict) -> None:
 
     # ── 匯出路徑 ──────────────────────────────────────────────────────────────
     st.subheader("匯出路徑")
-    export_paths: dict = result.get("export_paths", {})
     export_dir = result.get("export_dir", "")
 
     if export_dir:
@@ -136,7 +146,7 @@ def render_output(result: dict) -> None:
                 _open_folder(export_dir)
 
     if not export_paths:
-        st.caption("無匯出路徑")
+        # 已經在頂部顯示過「沒有選擇任何匯出格式」的警告,這裡不用重複講一次。
         return
 
     # COCO JSON

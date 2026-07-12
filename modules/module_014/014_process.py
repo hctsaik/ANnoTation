@@ -41,17 +41,24 @@ _CIM_LOG_DIR = Path(os.environ.get("CIM_LOG_DIR", str(_PROJECT_ROOT / "tmp" / "c
 
 # ─── VisualLatent 單向交棒收尾 ────────────────────────────────────────────────
 
-def _retire_lv_handoffs() -> dict | None:
-    """One-way hand-over close-out. VisualLatent (LV) hands batches to Labeling
-    and does NOT track them back (no inbox in LV). When a batch reaches export
-    here, the LV-delegated work is done — so mark any still-open LV hand-off
-    batches as delivered in the shared on-disk registry. This (a) lets the
-    Source tab (module_026) stop re-suggesting an already-handled batch, and
-    (b) lets the output page show a 'done, no need to return to LV' close-out.
+def _retire_lv_handoffs(item_paths: list[str] | None = None) -> dict | None:
+    """One-way hand-over close-out for the ONE batch this export came from.
+
+    VisualLatent (LV) hands batches to Labeling and does not track them back.
+    When a batch reaches export here, that LV-delegated batch is done — mark it
+    delivered in the shared on-disk registry so (a) the Source tab (module_026)
+    stops re-suggesting it and (b) the output page can show a close-out.
+
+    CRITICAL: close ONLY the hand-off this manifest was built from, identified by
+    ``item_paths`` — for an LV batch the manifest is scanned in place from the
+    hand-off's ``images_dir`` (module_026 `_run_local`), so each exported item's
+    path lives inside that ``images_dir``. Closing every open batch (the previous
+    behaviour) would falsely mark unrelated, still-in-flight LV batches as
+    delivered. With no ``item_paths``, or none matching a hand-off, close nothing.
 
     Frame-free: reads/writes <CIM_LOG_DIR>/lv_labeling_handoff/_pending.json
     directly (no import coupling to the LV plugin). Idempotent. Returns the
-    newest retired batch (for the close-out message), or None if there was none.
+    retired batch (for the close-out message), or None if there was none.
     """
     reg = _CIM_LOG_DIR / "lv_labeling_handoff" / "_pending.json"
     if not reg.exists():
@@ -60,7 +67,26 @@ def _retire_lv_handoffs() -> dict | None:
         data = json.loads(reg.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
-    open_rows = [v for v in data.values() if v.get("status") != "read_back"]
+
+    resolved: list[Path] = []
+    for p in (item_paths or []):
+        try:
+            resolved.append(Path(p).resolve())
+        except (OSError, ValueError):
+            continue
+
+    def _is_source_of_export(row: dict) -> bool:
+        idir = row.get("images_dir", "")
+        if not idir:
+            return False
+        try:
+            idir_r = Path(idir).resolve()
+        except (OSError, ValueError):
+            return False
+        return any(rp.parent == idir_r or idir_r in rp.parents for rp in resolved)
+
+    open_rows = [v for v in data.values()
+                 if v.get("status") != "read_back" and _is_source_of_export(v)]
     if not open_rows:
         return None
     for v in open_rows:
@@ -437,12 +463,20 @@ def export_yolo_txt(
 
         export_paths[split_name] = str(img_dir)
 
-    # data.yaml
+    # data.yaml — split 路徑必須反映「實際存在」的資料夾。未啟用分割時 split_groups
+    # 只有 {"all": [...]}，若寫死 train/val/test 會指向不存在的 images/train 等路徑,
+    # 拿去訓練會直接找不到資料。YOLO 慣例 train 為必填,val 缺省時指向同一份。
+    _splits = set(split_groups.keys())
+    if _splits == {"all"}:
+        split_lines = "train: images/all\nval: images/all\n"
+    else:
+        split_lines = ""
+        for name in ("train", "val", "test"):
+            if name in _splits:
+                split_lines += f"{name}: images/{name}\n"
     yaml_content = (
         f"path: {output_dir}\n"
-        f"train: images/train\n"
-        f"val: images/val\n"
-        f"test: images/test\n"
+        f"{split_lines}"
         f"nc: {len(sorted_labels)}\n"
         f"names: {json.dumps(sorted_labels, ensure_ascii=False)}\n"
     )
@@ -683,6 +717,22 @@ def execute_logic(params: dict) -> dict:
         stratified: bool
     """
     manifest_id: str = params.get("manifest_id", "")
+
+    # 「僅回傳，不匯出本地檔案」目前沒有對應的 iWISC 回傳實作——與其讓使用者以為
+    # 「僅回傳」真的回傳出去了、同時卻悄悄做了一次完整本地匯出(跟畫面上的選擇矛盾)，
+    # 不如誠實告知這條路徑還沒做完，請改走本地匯出。
+    if params.get("source_type") == "iwsc" and params.get("deliver_only"):
+        return {
+            "manifest_id": manifest_id,
+            "mode": "not_implemented",
+            "error": "「回傳至 iWISC」目前尚未串接外部系統，本次未執行任何匯出。"
+                     "如需保留標注結果，請取消勾選「僅回傳，不匯出本地檔案」，改用本地匯出格式。",
+            "total_items": 0, "annotated_items": 0, "classified_items": 0,
+            "label_counts": {}, "classification_counts": {},
+            "split_counts": {"train": 0, "val": 0, "test": 0},
+            "export_formats": [], "export_dir": "", "export_paths": {},
+        }
+
     export_formats: list[str] = params.get("export_formats", ["coco_json"])
     export_dir_str: str = params.get("export_dir", "")
     enable_split: bool = bool(params.get("enable_split", False))
@@ -780,7 +830,17 @@ def execute_logic(params: dict) -> dict:
 
     # ── 7. 匯出目錄 ─────────────────────────────────────────────────────────
     export_base = Path(export_dir_str) if export_dir_str else _cfg.get_default_export_dir(manifest_id)
-    export_base.mkdir(parents=True, exist_ok=True)
+    # 目錄路徑本身可能不合法（例如含 Windows 不允許的字元 `|`、`:`（非磁碟機代號位置）等），
+    # mkdir 會丟出 OSError。曾經：這行沒被 try/except 包住，例外會一路往上炸穿
+    # execute_logic()，只被 cv_framework_runner 的外層 handler 接住、顯示在 Input 頁，
+    # 但 Output 頁完全沒被更新——使用者切到 Output 頁時看到的是「上一次成功匯出」的
+    # 舊結果，卻誤以為那就是這次（帶著錯誤路徑）執行的結果。改成回傳 mode="error"，
+    # 讓這次失敗被正確寫入 RESULT_FILE、Output 頁如實顯示「這次失敗了」。
+    try:
+        export_base.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        return {**_base, "mode": "error",
+                "error": f"無法建立匯出目錄「{export_base}」：{exc}"}
     _base["export_dir"] = str(export_base)
 
     # ── 8. 各格式匯出 ───────────────────────────────────────────────────────
@@ -837,7 +897,9 @@ def execute_logic(params: dict) -> dict:
         return {**_base, "mode": "error", "error": f"匯出失敗：{exc}",
                 "export_paths": export_paths}
 
-    # 單向交棒收尾：匯出成功＝LV 交辦的這批已完成，標記已交付（讓 module_026 不再重複帶入）
-    lv_closed = _retire_lv_handoffs()
+    # 單向交棒收尾：匯出成功＝LV 交辦的**這批**已完成，標記已交付（讓 module_026 不再重複帶入）。
+    # 只關這次匯出真正來源的 handoff——用本 manifest 的 item 路徑比對各 handoff 的 images_dir，
+    # 不再一次關掉所有 open batch（那會誤關其他仍在標的 LV 批次）。
+    lv_closed = _retire_lv_handoffs([it.get("file_path", "") for it in items])
     return {**_base, "mode": "done", "error": None, "export_paths": export_paths,
             "lv_handoff_closed": lv_closed}

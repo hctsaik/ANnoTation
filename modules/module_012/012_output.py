@@ -229,7 +229,12 @@ def _find_annotation(img_path: str) -> tuple[bool, str, int]:
 
 # ─── 標注狀態快取（session_state + mtime 增量更新） ──────────────────────────
 
-PAGE_SIZE = 50
+PAGE_SIZE = 20
+
+
+def _first_pending_index(items: list[dict]) -> int | None:
+    """Return the global index of the first image that still needs annotation."""
+    return next((idx for idx, item in enumerate(items) if not item.get("has_ann")), None)
 
 
 def _dir_sidecar_index(db_items: list[dict]) -> dict[str, dict[str, float]]:
@@ -1099,7 +1104,7 @@ def _keyboard_listener() -> None:
         } else if (k === 'ArrowDown' || k === 'j' || k === 'J') {
             e.preventDefault(); clickByText('→ 下一張');
         } else if (k === 'a' || k === 'A') {
-            e.preventDefault(); clickByText('🖊');
+            e.preventDefault(); clickByText('開啟標注');
         } else if (k === 'c' || k === 'C') {
             var inputs = d.querySelectorAll('input[type="checkbox"]');
             for (var inp of inputs) {
@@ -1199,8 +1204,9 @@ def _dataset_class_list(image_path: str) -> list[str]:
         return []
 
 
-def render_output(result: dict) -> None:
-    _help.render_help_button("module_012", "output", "🏷️ 標注進度")
+def render_output(result: dict, *, show_help: bool = True) -> None:
+    if show_help:
+        _help.render_help_button("module_012", "output", "🏷️ 標注進度")
     # 若 module_019 已下載新資料但 module_010 還沒重新載入，顯示警告並鎖定標注入口
     if _check_pending_reload():
         st.error(
@@ -1328,11 +1334,22 @@ def render_output(result: dict) -> None:
     border-radius: 4px;
 }
 .m012-thumb:hover .m012-preview { display: block; }
+[data-testid="stButton"] button[kind="primary"] {
+    background: #2563eb !important;
+    border-color: #2563eb !important;
+}
+[data-testid="stButton"] button[kind="primary"]:hover {
+    background: #1d4ed8 !important;
+    border-color: #1d4ed8 !important;
+}
 /* 隱形注入元件（autorefresh / 鍵盤快捷 / 點擊放大 / 連線韌性 / 幽靈按鈕）雖 height=0，
    其外層 element 容器仍佔一個 flex gap 槽 → 在標題下方堆出大片空白。直接收掉容器，
    iframe 仍會載入並執行其 JS（display:none 不影響已在 DOM 的 iframe 載入腳本）。 */
 [data-testid="stElementContainer"]:has(iframe[height="0"]) { display: none !important; }
 [data-testid="stElementContainer"]:has(iframe[title*="autorefresh" i]) { display: none !important; }
+/* Keep the summary compact so the first image remains visible in the initial viewport. */
+[data-testid="stMetric"] { padding-top: 0.2rem !important; padding-bottom: 0.2rem !important; }
+[data-testid="stMetric"] [data-testid="stMetricLabel"] { min-height: 1.25rem; }
 /* 分隔線與收合區塊上下留白收緊，避免工作台堆出大片空白。 */
 hr, [data-testid="stDivider"] { margin: 0.45rem 0 !important; }
 [data-testid="stExpander"] { margin-top: 0 !important; margin-bottom: 0.25rem !important; }
@@ -1416,9 +1433,29 @@ hr, [data-testid="stDivider"] { margin: 0.45rem 0 !important; }
         _folder_proc = None
 
     _autorefresh_hint = f"自動掃描 {autorefresh_seconds}s" if autorefresh_enabled else "自動掃描：關閉"
-    _prog_c, _btn_folder_c, _btn_update_c = st.columns([6, 2, 2], vertical_alignment="center")
+    pending_count = total - annotated
+    pending_idx = _first_pending_index(items)
+    _prog_c, _btn_pending_c, _btn_folder_c, _btn_update_c = st.columns(
+        [5, 2, 2, 2], vertical_alignment="center"
+    )
     with _prog_c:
         st.progress(pct, text=f"已標注 {annotated} / {total} 張（{pct * 100:.1f}%）　·　{_autorefresh_hint}")
+    with _btn_pending_c:
+        if pending_idx is not None and st.button(
+            f"標注最後 1 張" if pending_count == 1 else f"繼續標注（{pending_count}）",
+            type="primary",
+            key="m012_continue_pending",
+            use_container_width=True,
+            help="只顯示待標注圖片，並選取第一張待處理圖片。",
+        ):
+            st.session_state["m012_filter"] = "⏳ 待標注"
+            st.session_state["m012_search"] = ""
+            st.session_state["m012_clf_filter"] = "全部分類"
+            st.session_state["m012_ai_conf_filter"] = "全部 conf"
+            st.session_state["m012_selected_idx"] = pending_idx
+            st.session_state["m012_page"] = 0
+            st.toast(f"已篩選 {pending_count} 張待標注圖片並選取第一張。", icon="🎯")
+            st.rerun()
     with _btn_folder_c:
         if annotation_tool == "x-anylabeling":
             if _folder_active:
@@ -1464,17 +1501,18 @@ hr, [data-testid="stDivider"] { margin: 0.45rem 0 !important; }
                         )
                     st.rerun()
         else:
-            if st.button("重新掃描標注", key="m012_refresh_annotations", use_container_width=True):
+            if st.button("重新掃描標註", key="m012_refresh_annotations", use_container_width=True):
                 st.session_state.pop("m012_items", None)
                 st.session_state.pop("m012_mtimes", None)
                 st.session_state.pop("m012_cache_mid", None)
                 st.rerun()
     with _btn_update_c:
-        if st.button("➡️ 前往 匯出 / 回傳", type="primary", key="m012_goto_update", use_container_width=True):
-            # 切到本 sheet 實際存在的「匯出 / 回傳」tab（module_014）。舊版指向 module_013
-            # （Sync Back），但它不在 annotation sheet 的 tab 列內，SWITCH_TAB 在 sheetTabs
-            # 找不到 → 按了沒反應。
-            _post_message("SWITCH_TAB", {"plugin_id": "module_014", "tab": "input"})
+        if st.button("匯出 / 回傳", key="m012_goto_update", use_container_width=True):
+            if "m012_app_stage" in st.session_state:
+                st.session_state["_m012_next_stage"] = "export"
+                st.rerun()
+            else:
+                _post_message("SWITCH_TAB", {"plugin_id": "module_014", "tab": "input"})
 
     if _folder_active:
         _enh_mode_active = bool(st.session_state.get("m012_folder_enhanced_mode", False))
@@ -1529,7 +1567,7 @@ hr, [data-testid="stDivider"] { margin: 0.45rem 0 !important; }
 
     # ── 版面比例（RWD）：固定 1:2 在寬螢幕會讓明細圖太小、左右浪費 → 讓使用者選 ──
     # 預設「大圖（1:4）」：以影像為主，清單收成窄側欄、明細影像佔最大寬度。
-    _ratio_map = {"大圖（1:4）": [1, 4], "標準（1:2）": [1, 2], "並排（1:1）": [1, 1]}
+    _ratio_map = {"大圖（1:3）": [1, 3], "標準（1:2）": [1, 2], "並排（1:1）": [1, 1]}
     _ratio_label = st.radio(
         "版面", list(_ratio_map.keys()), horizontal=True,
         key="m012_layout_ratio", label_visibility="collapsed",
@@ -1544,18 +1582,24 @@ hr, [data-testid="stDivider"] { margin: 0.45rem 0 !important; }
     # ════════════════════════════════════════════════════════════════
     with left_col:
         st.markdown("**圖片列表**")
+        st.markdown("[跳到選取圖片](#m012-selected-image)")
+
+        if st.session_state.pop("_m012_clear_filters", False):
+            st.session_state["m012_search"] = ""
+            st.session_state["m012_filter"] = "全部狀態"
+            st.session_state["m012_clf_filter"] = "全部分類"
+            st.session_state["m012_ai_conf_filter"] = "全部 conf"
 
         search_col, filter_col = st.columns([1, 1])
         with search_col:
             search_q = st.text_input(
                 "搜尋檔名", value="", key="m012_search",
-                placeholder="搜尋…", label_visibility="collapsed",
+                placeholder="搜尋…",
             ).strip().lower()
         with filter_col:
             filter_opt = st.selectbox(
                 "狀態篩選",
                 ["全部狀態", "⏳ 待標注", "✅ 已標注"],
-                label_visibility="collapsed",
                 key="m012_filter",
             )
 
@@ -1566,14 +1610,12 @@ hr, [data-testid="stDivider"] { margin: 0.45rem 0 !important; }
             clf_filter = st.selectbox(
                 "分類篩選",
                 clf_filter_options,
-                label_visibility="collapsed",
                 key="m012_clf_filter",
             )
         with _ai_conf_c:
             ai_conf_filter = st.selectbox(
                 "AI 信心度",
                 ["全部 conf", "🤖 低 conf"],
-                label_visibility="collapsed",
                 key="m012_ai_conf_filter",
             )
 
@@ -1598,6 +1640,21 @@ hr, [data-testid="stDivider"] { margin: 0.45rem 0 !important; }
             visible = [it for it in visible if _low_conf(it)]
         if search_q:
             visible = [it for it in visible if search_q in Path(it.get("file_path", "")).name.lower()]
+
+        active_filters = [
+            value for value, default in (
+                (filter_opt, "全部狀態"),
+                (clf_filter, "全部分類"),
+                (ai_conf_filter, "全部 conf"),
+            ) if value != default
+        ]
+        if search_q:
+            active_filters.insert(0, f"搜尋：{search_q}")
+        if active_filters:
+            st.caption("已套用　" + " · ".join(active_filters))
+            if st.button("清除全部篩選", key="m012_clear_filters", use_container_width=True):
+                st.session_state["_m012_clear_filters"] = True
+                st.rerun()
 
         # 篩選切換時重設頁碼
         _filter_key = (filter_opt, clf_filter, search_q, ai_conf_filter)
@@ -1628,21 +1685,26 @@ hr, [data-testid="stDivider"] { margin: 0.45rem 0 !important; }
         page_end   = min(page_start + PAGE_SIZE, n_visible)
         page_items = visible[page_start:page_end]
 
+        st.markdown(
+            f'<div role="status" aria-live="polite" class="m012-result-count">顯示 {n_visible} 張</div>',
+            unsafe_allow_html=True,
+        )
+
         if not visible:
             st.info("目前篩選條件下沒有圖片。")
         else:
             # ─ 分頁控制列（上方）── 兼顯示總數 ─────────────────────
             if n_pages > 1:
-                pg_prev, pg_info, pg_next = st.columns([1, 3, 1])
+                pg_prev, pg_info, pg_next = st.columns([1, 4, 1], vertical_alignment="center")
                 with pg_prev:
-                    if st.button("◀", key="m012_pg_prev_top", disabled=(page == 0),
-                                 use_container_width=True):
+                    if st.button("←", key="m012_pg_prev_top", disabled=(page == 0),
+                                 use_container_width=True, help="上一頁"):
                         st.session_state["m012_page"] = page - 1
                 with pg_info:
-                    st.caption(f"第 {page + 1}/{n_pages} 頁　共 {n_visible} 張")
+                    st.caption(f"第 {page + 1}/{n_pages} 頁 · {n_visible} 張")
                 with pg_next:
-                    if st.button("▶", key="m012_pg_next_top", disabled=(page == n_pages - 1),
-                                 use_container_width=True):
+                    if st.button("→", key="m012_pg_next_top", disabled=(page == n_pages - 1),
+                                 use_container_width=True, help="下一頁"):
                         st.session_state["m012_page"] = page + 1
             else:
                 st.caption(f"共 {n_visible} 張")
@@ -1716,7 +1778,7 @@ hr, [data-testid="stDivider"] { margin: 0.45rem 0 !important; }
                 # 選取狀態與是否已標注都改成縮圖上的視覺標記,不再用獨立文字列。
                 # P4(RWD)：清單窄（大圖模式）時收掉第二張縮圖；縮圖改隨欄寬縮放，
                 # 避免固定 120px 在窄欄溢出。
-                if _ratio_label == "大圖（1:4）":
+                if _ratio_label == "大圖（1:3）":
                     thumb_c, info_c = st.columns([1, 3])
                     ann_c = None
                 else:
@@ -1807,19 +1869,20 @@ hr, [data-testid="stDivider"] { margin: 0.45rem 0 !important; }
                     if clf_label:
                         st.caption(f"🏷 {clf_label}")
 
-                    # 兩個操作按鈕：🖊 標注工具 | ⚡ AI 標注
+                    # 使用文字按鈕，避免作業系統 emoji 字型造成圖示外觀不一致。
                     _item_folder_active = _proc_alive(
                         st.session_state.get("m012_folder_proc")
                     ) and annotation_tool == "x-anylabeling"
                     _item_enh_mode = _item_folder_active and bool(
                         st.session_state.get("m012_folder_enhanced_mode", False)
                     )
-                    btn_ann, btn_ai, _btn_pad = st.columns([1, 1, 4])
+                    btn_ann, btn_ai = st.columns(2)
                     with btn_ann:
                         if st.button(
-                            "🖊",
+                            "開啟標注",
                             key=f"xany_{item['item_id']}",
                             help="用標注工具開啟此張",
+                            use_container_width=True,
                         ):
                             st.session_state["m012_selected_idx"] = global_idx
                             if _item_folder_active:
@@ -1848,10 +1911,11 @@ hr, [data-testid="stDivider"] { margin: 0.45rem 0 !important; }
                             st.rerun()
                     with btn_ai:
                         if st.button(
-                            "⚡",
+                            "AI 預標注",
                             key=f"ai_{item['item_id']}",
                             disabled=not bool(_ai_model),
                             help="對此張執行 AI 預標注" if _ai_model else "請先在頂部設定 AI 模型",
+                            use_container_width=True,
                         ):
                             with st.spinner("AI 標注中…"):
                                 _stats = _run_ai_items(
@@ -1868,16 +1932,16 @@ hr, [data-testid="stDivider"] { margin: 0.45rem 0 !important; }
 
             # ─ 分頁控制列 ────────────────────────────────────────────
             if n_pages > 1:
-                pg_prev, pg_info, pg_next = st.columns([1, 3, 1])
+                pg_prev, pg_info, pg_next = st.columns([1, 4, 1], vertical_alignment="center")
                 with pg_prev:
-                    if st.button("◀", key="m012_pg_prev", disabled=(page == 0),
-                                 use_container_width=True):
+                    if st.button("←", key="m012_pg_prev", disabled=(page == 0),
+                                 use_container_width=True, help="上一頁"):
                         st.session_state["m012_page"] = page - 1
                 with pg_info:
-                    st.caption(f"第 {page + 1} / {n_pages} 頁（共 {n_visible} 張）")
+                    st.caption(f"第 {page + 1}/{n_pages} 頁 · {n_visible} 張")
                 with pg_next:
-                    if st.button("▶", key="m012_pg_next", disabled=(page == n_pages - 1),
-                                 use_container_width=True):
+                    if st.button("→", key="m012_pg_next", disabled=(page == n_pages - 1),
+                                 use_container_width=True, help="下一頁"):
                         st.session_state["m012_page"] = page + 1
 
         # 選取項目 scroll into view
@@ -1892,6 +1956,7 @@ setTimeout(function() {
     # 右欄：Detail Panel
     # ════════════════════════════════════════════════════════════════
     with right_col:
+        st.markdown('<span id="m012-selected-image" tabindex="-1"></span>', unsafe_allow_html=True)
         sel_idx = int(st.session_state.get("m012_selected_idx", 0))
         if sel_idx >= len(items):
             sel_idx = 0
@@ -2017,7 +2082,7 @@ setTimeout(function() {
                     _ai_conf = st.slider(
                         "Confidence", 0.01, 1.0,
                         value=float(_ai_c.get("conf_threshold", 0.25)),
-                        step=0.05, format="%.2f", key="m012_ai_conf",
+                        step=0.01, format="%.2f", key="m012_ai_conf",
                     )
                 with _ow_col:
                     _ai_overwrite = st.checkbox(
@@ -2060,7 +2125,7 @@ setTimeout(function() {
                                     f"只能偵測它原本學過的類別。\n"
                                     + (f"- 此模型可偵測的類別：`{'、'.join(_cls[:10])}{'…' if len(_cls) > 10 else ''}`\n" if _cls else "")
                                     + f"- 若您的圖片內容不屬於上述類別，模型不會有輸出。\n\n"
-                                    f"**建議：** 使用「🖊 標注工具」手動標注幾張後，再透過 Training 頁訓練專屬模型。"
+                                    f"**建議：** 使用「開啟標注」手動標注幾張後，再透過 Training 頁訓練專屬模型。"
                                 )
                             else:
                                 st.toast(
@@ -2180,11 +2245,11 @@ setTimeout(function() {
                 else:
                     # ann_path 存在但 shapes 為空（可能是 AI 推論後未偵測到物件）
                     _right_panel_img(fp, enhance, item_id=item_id)
-                    st.info("此圖尚無標注框。若剛執行過 AI Pre-label，表示模型在此圖未偵測到物件（可嘗試降低 Confidence 門檻）。如需手動標注，請使用「🖊 標注工具」。")
+                    st.info("此圖尚無標注框。若剛執行過 AI Pre-label，表示模型在此圖未偵測到物件（可嘗試降低 Confidence 門檻）。如需手動標注，請使用「開啟標注」。")
             else:
                 # 無標注
                 _right_panel_img(fp, enhance, item_id=item_id)
-                st.info("此圖尚無標注，點擊左側「🖊 標注工具」開始標注。")
+                st.info("此圖尚無標注，點擊左側「開啟標注」開始標注。")
 
             # ── 幽靈按鈕（最底部，JS 隱藏，鍵盤快捷鍵用） ───────────────────
             if st.button("← 上一張", key="m012_prev_btn"):

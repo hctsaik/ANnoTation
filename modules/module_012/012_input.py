@@ -72,6 +72,19 @@ def _duplicate_labels(labels: list[str]) -> list[str]:
 # ─── 主入口 ──────────────────────────────────────────────────────────────────
 
 def render_input() -> dict:
+    st.markdown(
+        """<style>
+        [data-testid="stButton"] button[kind="primary"] {
+            background: #2563eb !important;
+            border-color: #2563eb !important;
+        }
+        [data-testid="stButton"] button[kind="primary"]:hover {
+            background: #1d4ed8 !important;
+            border-color: #1d4ed8 !important;
+        }
+        </style>""",
+        unsafe_allow_html=True,
+    )
     _help.render_help_button("module_012", "input", "🏷️ 開始標注前確認")
     st.caption("設定標注類別與工具，確認後按「執行」開啟標注工作台。")
 
@@ -120,15 +133,22 @@ def render_input() -> dict:
         )
         labels = _parse_lines(labels_raw)
         duplicate_labels = _duplicate_labels(labels)
+        labels_applied = st.button(
+            "套用類別",
+            key="m012_apply_labels",
+            help="套用文字框中的最新內容；也可以直接按下方的「執行」。",
+        )
         if labels:
             st.success(
                 f"將建立 {len(labels)} 個標注類別：{', '.join(labels[:8])}"
                 + ("…" if len(labels) > 8 else "")
             )
+            if labels_applied:
+                st.caption("已套用最新類別，可繼續執行。")
             if duplicate_labels:
                 st.warning(f"有重複類別：{', '.join(duplicate_labels[:5])}")
         else:
-            st.warning("請先輸入標注工具中會使用的框選類別。")
+            st.info("輸入類別後按「套用類別」，或直接按下方的「執行」。")
 
     # ── 分類類別 ──────────────────────────────────────────────────────────────
     if "m012_clf_raw" not in st.session_state:

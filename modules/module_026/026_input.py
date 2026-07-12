@@ -17,6 +17,10 @@ _ui_spec = _ilu.spec_from_file_location("_ui_components", _HERE.parents[3] / "sc
 _ui = _ilu.module_from_spec(_ui_spec)
 _ui_spec.loader.exec_module(_ui)
 
+_help_spec = _ilu.spec_from_file_location("_help", _HERE.parents[3] / "scripts" / "shared" / "_help.py")
+_help = _ilu.module_from_spec(_help_spec)
+_help_spec.loader.exec_module(_help)
+
 _DEFAULT_EXTENSIONS = [".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff"]
 
 _ANT_ACTIVE_LABEL = {0: "待標注", 1: "標注中", 2: "已完成"}
@@ -329,6 +333,7 @@ def _render_iwsc() -> dict:
 # ─── 主入口 ──────────────────────────────────────────────────────────────────
 
 def render_input() -> dict:
+    _help.render_help_button("module_026", "input", "📥 資料來源 — 使用說明")
     _ui.inject_streamlit_zh_overrides()
 
     cfg = _cfg.load_config()

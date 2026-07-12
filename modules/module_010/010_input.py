@@ -28,7 +28,7 @@ _DEFAULT_EXTENSIONS = [".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff"]
 # ─── 主入口 ──────────────────────────────────────────────────────────────────
 
 def render_input() -> dict:
-    _help.render_help_button("module_010", "input", "📦 Data Feeder — 資料來源設定")
+    _help.render_help_button("module_010", "input", "📦 資料來源設定")
     st.caption("從資料夾、資料庫或 API 建立標準化圖片清單（DatasetManifest）")
 
     cfg = _cfg.load_config()
@@ -60,8 +60,8 @@ def render_input() -> dict:
 
         if _cfg.read_shared_suggested_folder() and not st.session_state.get("_m010_suggested_banner_dismissed"):
             st.info(
-                "📥 **Data Downloader** 已下載新資料集，路徑已自動填入。"
-                " 確認後請按「執行」載入。",
+                "**資料來源**已收到新資料集，路徑已自動填入。"
+                " 請確認後建立資料集並開始標注。",
                 icon="ℹ️",
             )
 
