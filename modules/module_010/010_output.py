@@ -86,13 +86,13 @@ def _build_csv(items: list[dict]) -> bytes:
 # ─── 主入口 ──────────────────────────────────────────────────────────────────
 
 def render_output(result: dict) -> None:
-    _help.render_help_button("module_010", "output", "📦 Data Feeder — 執行結果")
+    _help.render_help_button("module_010", "output", "📦 資料集建立結果")
     mode = result.get("mode", "idle")
 
     if mode == "idle":
         st.info(
             "**使用方式：**\n\n"
-            "1. 在左側 Input 頁面選擇資料來源（資料夾 / 資料庫 / API）\n"
+            "1. 回到上方設定選擇資料來源（資料夾 / 資料庫 / API）\n"
             "2. 填寫路徑設定，點選 ▶ 執行\n"
             "3. 建立完成後，此頁面顯示資料摘要"
         )

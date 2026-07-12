@@ -30,7 +30,7 @@ class _FakeStreamlit:
     def info(self, text):
         self.calls.append(("info", text))
 
-    def markdown(self, text):
+    def markdown(self, text, **kwargs):
         self.calls.append(("markdown", text))
 
     def success(self, text):
@@ -61,7 +61,7 @@ class _FakeStreamlit:
         self.calls.append(("text_input", label))
         return self.session_state.get(key, "")
 
-    def button(self, label, *, key=None, help=None):
+    def button(self, label, *, key=None, help=None, **kwargs):
         self.calls.append(("button", label))
         return False
 
@@ -188,3 +188,8 @@ def test_render_input_defaults_labels_to_empty_for_new_config():
 
     assert result["labels"] == []
     assert fake_st.session_state["m012_labels_raw"] == ""
+    assert ("button", "套用類別") in fake_st.calls
+    assert (
+        "info",
+        "輸入類別後按「套用類別」，或直接按下方的「執行」。",
+    ) in fake_st.calls

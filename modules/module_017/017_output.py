@@ -87,7 +87,7 @@ def _render_dashboard(data: dict) -> None:
     # 進度摘要
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("總圖數", total)
-    c2.metric("BBox 已標注", annotated, _pct_str(annotated, total))
+    c2.metric("含有效框", annotated, _pct_str(annotated, total))
     c3.metric("已分類", classified, _pct_str(classified, total))
     c4.metric("匯出次數", export_count)
 
@@ -112,7 +112,7 @@ def _render_dashboard(data: dict) -> None:
         st.markdown("**框數範圍**")
         st.markdown(f"{shapes_stats['min']} – {shapes_stats['max']}" if shapes_stats else "—")
     with h4:
-        st.markdown("**尚未標注**")
+        st.markdown("**無有效框**")
         unannotated = no_json + empty_json
         color = "red" if unannotated > 0 else "green"
         st.markdown(f":{color}[**{unannotated} 張**]")
@@ -125,7 +125,7 @@ def _render_dashboard(data: dict) -> None:
     if no_json > 0 and annotated == 0:
         st.info(f"尚有 **{total}** 張圖片未開始標注，請切換到 **🏷️ Annotation** 頁籤。")
     elif no_json > 0:
-        st.info(f"還有 **{no_json}** 張圖片尚未標注。")
+        st.info(f"還有 **{no_json}** 張圖片缺少標注檔；空標注檔另計。")
 
     st.divider()
 
@@ -332,6 +332,11 @@ def _render_label_manager(manifest_id: str, data: dict) -> None:
     label_map: dict[str, list[str]] = data.get("label_map", {})
     near_dupes: list[tuple] = data.get("near_dupes", [])
 
+    st.info(
+        "安全變更流程：先查看每個標籤的影響檔案數，再執行改名、合併或刪除。"
+        "刪除前會再次顯示影響範圍並要求確認；建議先備份資料集。"
+    )
+
     # 摘要列
     m1, m2 = st.columns(2)
     m1.metric("標籤種類", len(label_map))
@@ -361,7 +366,7 @@ def _render_label_manager(manifest_id: str, data: dict) -> None:
         with st.container():
             row_cols = st.columns([4, 3, 1, 1])
             row_cols[0].markdown(f"**`{lbl}`**")
-            row_cols[1].caption(f"{len(files)} 個檔案")
+            row_cols[1].caption(f"影響 {len(files)} 個檔案")
 
             if row_cols[2].button("✏️ 改名", key=f"m017_btn_rename_{lbl}"):
                 st.session_state[f"m017_show_rename_{lbl}"] = True
@@ -411,7 +416,7 @@ def _render_label_manager(manifest_id: str, data: dict) -> None:
     # 合併操作
     st.divider()
     st.markdown("#### 合併標籤")
-    st.caption("將多個來源標籤統一改名為同一個目標標籤")
+    st.caption("將多個來源標籤統一改為目標標籤；送出前可取消，完成後請重新掃描確認結果。")
 
     with st.form(key="m017_form_merge"):
         sources = st.multiselect(
@@ -454,7 +459,7 @@ def _render_label_manager(manifest_id: str, data: dict) -> None:
 def render_output(result: dict) -> None:
     _help.render_help_button("module_017", "output", "📊 管理中心 — 統計")
     if not result or result.get("error"):
-        st.info("請先在 Input 頁籤確認設定，然後按下 ▶ 執行。")
+        st.info("正在掃描標籤與影響範圍，請稍候或按上方重新掃描。")
         if result and result.get("error"):
             st.error(result["error"])
         return

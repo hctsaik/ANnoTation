@@ -175,6 +175,34 @@ def test_label_filter(tmp_path, monkeypatch):
     assert "cat" in result["items"][0]["labels"]
 
 
+def test_cols_count_and_show_overlay_pass_through_to_output(tmp_path, monkeypatch):
+    """回歸測試:Input 頁的「每行圖片數」/「顯示 BBox overlay」曾經因為 execute_logic()
+    沒有讀取/回傳這兩個欄位,導致 Output 頁永遠套用預設值,使用者怎麼調都沒有用。"""
+    cim_log = tmp_path / "cim_log"
+    monkeypatch.setenv("CIM_LOG_DIR", str(cim_log))
+    mdb = _load(_SHARED, "_mdb_018_h")
+    proc = _load(_HERE / "018_process.py", "_018_proc_h")
+
+    img = tmp_path / "img.jpg"
+    img.write_bytes(b"img")
+
+    mid = "m018_h"
+    _make_manifest(cim_log, mdb, mid, [
+        {"item_id": "i1", "file_path": str(img), "width": 100, "height": 100},
+    ])
+
+    result = proc.execute_logic({
+        "manifest_id": mid, "filter": "全部", "cols_count": 5, "show_overlay": False,
+    })
+    assert result["cols_count"] == 5
+    assert result["show_overlay"] is False
+
+    # 沒帶這兩個欄位時(例如舊的呼叫端)仍要有安全預設值,不可 KeyError
+    result_default = proc.execute_logic({"manifest_id": mid, "filter": "全部"})
+    assert result_default["cols_count"] == 3
+    assert result_default["show_overlay"] is True
+
+
 def test_item_fields_present(tmp_path, monkeypatch):
     cim_log = tmp_path / "cim_log"
     monkeypatch.setenv("CIM_LOG_DIR", str(cim_log))

@@ -45,13 +45,18 @@ def render_input() -> dict:
 
     st.info(
         f"📦 **{selected['name']}**　{selected.get('item_count', 0)} 張　"
-        f"｜　若要切換請回 Data Feeder 重新執行"
+        f"｜　可從 Annotation App 的「資料來源」切換"
     )
 
     filter_val = st.selectbox(
         "篩選條件",
         options=_FILTER_OPTIONS,
         key="m018_filter",
+    )
+    review_filter = st.selectbox(
+        "QA 狀態",
+        options=["全部", "待審查", "已核准", "已退回"],
+        key="m018_review_filter",
     )
 
     cols_count = st.slider("每行圖片數", min_value=2, max_value=6, value=3, key="m018_cols")
@@ -67,6 +72,7 @@ def render_input() -> dict:
     return {
         "manifest_id": manifest_id,
         "filter": filter_val,
+        "review_filter": review_filter,
         "cols_count": cols_count,
         "show_overlay": show_overlay,
         "label_filter": label_filter,

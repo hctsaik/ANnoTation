@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -120,6 +121,27 @@ def test_export_yolo_txt_creates_data_yaml(tmp_path, monkeypatch):
     parts = line.split()
     assert parts[0] == "0"  # class_id
     assert abs(float(parts[1]) - 0.3) < 0.05  # cx ≈ 0.3
+
+
+def test_export_yolo_data_yaml_reflects_actual_splits(tmp_path, monkeypatch):
+    """回歸測試:未啟用分割時 split_groups 只有 {"all": [...]},data.yaml 曾寫死
+    train: images/train / val: images/val / test: images/test — 全部指向不存在的
+    資料夾,拿去訓練會直接找不到資料。修正後必須指向實際存在的 images/all。"""
+    monkeypatch.setenv("CIM_LOG_DIR", str(tmp_path / "cim_log"))
+    proc = _load(_HERE / "014_process.py", "_014_proc_yolo_all")
+
+    items = [{"item_id": "a", "file_path": str(tmp_path / "a.jpg"),
+               "width": 100, "height": 100}]
+    (tmp_path / "a.jpg").write_bytes(b"img")
+    shapes_map = {"a": [{"label": "dog", "x1": 10, "y1": 10, "x2": 50, "y2": 50,
+                          "shape_type": "rectangle", "polygon_pts": []}]}
+    out = tmp_path / "yolo_all"
+    proc.export_yolo_txt(items, shapes_map, {"all": ["a"]}, out)
+
+    yaml_text = (out / "data.yaml").read_text(encoding="utf-8")
+    assert "images/all" in yaml_text
+    assert "images/train" not in yaml_text  # 不得指向不存在的資料夾
+    assert (out / "images" / "all" / "a.jpg").exists()
 
 
 # ─── export_pascal_voc ────────────────────────────────────────────────────────
@@ -261,6 +283,95 @@ def test_execute_logic_full_pipeline(tmp_path, monkeypatch):
     assert "pascal_voc" in result["export_paths"]
     assert "imagefolder" in result["export_paths"]
     assert "csv" in result["export_paths"]
+
+
+def test_execute_logic_iwsc_deliver_only_does_not_silently_export(tmp_path, monkeypatch):
+    """回歸測試:「僅回傳，不匯出本地檔案」曾經完全沒有後端判斷——不論有沒有勾選，
+    都會做一次完整的本地匯出，跟畫面上的選擇矛盾。回傳至 iWISC 目前沒有真正的對外
+    實作，所以誠實回報「尚未實作」，而不是悄悄匯出一份使用者沒有要求的本地檔案。"""
+    cim_log = tmp_path / "cim_log"
+    monkeypatch.setenv("CIM_LOG_DIR", str(cim_log))
+    mdb = _load(_SHARED, "_mdb_014_iwsc")
+    proc = _load(_HERE / "014_process.py", "_014_proc_iwsc")
+
+    src = tmp_path / "img001.jpg"
+    src.write_bytes(b"img")
+
+    db_path = cim_log / "db" / "manifest.sqlite"
+    mdb.init_db(db_path)
+    mid = "manifest_014_iwsc"
+    mdb.create_manifest(db_path, mid, "Test Manifest", "folder", {})
+    mdb.add_manifest_items(db_path, mid,
+        [{"item_id": "i1", "file_path": str(src), "width": 640, "height": 480}])
+
+    result = proc.execute_logic({
+        "source_type": "iwsc", "manifest_id": mid, "deliver_only": True,
+        "iwsc_tenant_id": "t1", "iwsc_task_id": "task1", "iwsc_ant_id": "ant1",
+    })
+
+    assert result["mode"] == "not_implemented"
+    assert result["export_paths"] == {}
+    assert not (tmp_path / "export").exists()  # 確認真的沒有偷偷寫檔
+
+
+def test_execute_logic_no_formats_selected_yields_empty_export_paths(tmp_path, monkeypatch):
+    """回歸測試:一個格式都沒選時，execute_logic 仍要老實回報 export_paths 為空，
+    讓 Output 頁能據此顯示警告而不是「匯出完成！」。"""
+    cim_log = tmp_path / "cim_log"
+    monkeypatch.setenv("CIM_LOG_DIR", str(cim_log))
+    mdb = _load(_SHARED, "_mdb_014_noformat")
+    proc = _load(_HERE / "014_process.py", "_014_proc_noformat")
+
+    src = tmp_path / "img001.jpg"
+    src.write_bytes(b"img")
+
+    db_path = cim_log / "db" / "manifest.sqlite"
+    mdb.init_db(db_path)
+    mid = "manifest_014_noformat"
+    mdb.create_manifest(db_path, mid, "Test Manifest", "folder", {})
+    mdb.add_manifest_items(db_path, mid,
+        [{"item_id": "i1", "file_path": str(src), "width": 640, "height": 480}])
+
+    result = proc.execute_logic({
+        "manifest_id": mid, "export_formats": [], "export_dir": str(tmp_path / "export"),
+    })
+
+    assert result["mode"] == "done"
+    assert result["export_paths"] == {}
+
+
+@pytest.mark.skipif(os.name != "nt", reason="'|' 只在 Windows 路徑中不合法")
+def test_execute_logic_invalid_export_dir_returns_error_not_raise(tmp_path, monkeypatch):
+    """回歸測試：匯出目錄路徑含 Windows 不合法字元（如 `|`）時，曾經 export_base.mkdir()
+    沒被 try/except 包住，例外會一路往上炸穿 execute_logic()——只被外層框架接住顯示在
+    Input 頁，Output 頁完全沒被更新（使用者切去 Output 會看到上一次成功匯出的舊結果，
+    誤以為那就是這次的結果）。改成回傳 mode="error"，讓這次失敗被正確寫入結果、
+    Output 頁如實顯示失敗訊息。"""
+    cim_log = tmp_path / "cim_log"
+    monkeypatch.setenv("CIM_LOG_DIR", str(cim_log))
+    mdb = _load(_SHARED, "_mdb_014_badpath")
+    proc = _load(_HERE / "014_process.py", "_014_proc_badpath")
+
+    src = tmp_path / "img001.jpg"
+    src.write_bytes(b"img")
+
+    db_path = cim_log / "db" / "manifest.sqlite"
+    mdb.init_db(db_path)
+    mid = "manifest_014_badpath"
+    mdb.create_manifest(db_path, mid, "Test Manifest", "folder", {})
+    mdb.add_manifest_items(db_path, mid,
+        [{"item_id": "i1", "file_path": str(src), "width": 640, "height": 480}])
+
+    bad_dir = str(tmp_path / "bad|dir" / "export")
+    result = proc.execute_logic({
+        "manifest_id": mid,
+        "export_formats": ["csv"],
+        "export_dir": bad_dir,
+    })
+
+    assert result["mode"] == "error"
+    assert result["error"]
+    assert result["export_paths"] == {}
 
 
 def test_execute_logic_missing_manifest(tmp_path, monkeypatch):

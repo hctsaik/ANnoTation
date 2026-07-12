@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import ast
 import json
 import os
 import shutil
@@ -35,6 +36,25 @@ def _load_cfg_module(cim_log: Path, suffix: str = ""):
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
+
+
+def test_first_pending_index_returns_global_position():
+    source = (_HERE / "012_output.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    function = next(
+        node for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "_first_pending_index"
+    )
+    namespace: dict = {}
+    exec(compile(ast.Module(body=[function], type_ignores=[]), "012_output.py", "exec"), namespace)
+    first_pending_index = namespace["_first_pending_index"]
+
+    assert first_pending_index([
+        {"has_ann": True},
+        {"has_ann": True},
+        {"has_ann": False},
+    ]) == 2
+    assert first_pending_index([{"has_ann": True}]) is None
 
 
 def test_output_detects_same_directory_xanylabeling_json(tmp_path):

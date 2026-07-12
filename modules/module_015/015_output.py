@@ -17,7 +17,7 @@ def render_output(result: dict) -> None:
     mode = result.get("mode", "idle")
 
     if mode == "idle":
-        st.info("尚未建立任何 Manifest，請先執行 **📦 Data Feeder**。")
+        st.info("尚未建立任何資料集，請先到 Annotation App 的「資料來源」。")
         return
 
     if mode == "error":
@@ -53,7 +53,7 @@ def render_output(result: dict) -> None:
     # ── 進度摘要 ───────────────────────────────────────────────────────────
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("總圖數", total)
-    c2.metric("BBox 已標注", annotated, _pct_str(annotated, total))
+    c2.metric("含有效框", annotated, _pct_str(annotated, total))
     c3.metric("已分類", classified, _pct_str(classified, total))
     c4.metric("匯出次數", export_count)
 
@@ -85,7 +85,7 @@ def render_output(result: dict) -> None:
             st.markdown("—")
 
     with h4:
-        st.markdown("**尚未標注**")
+        st.markdown("**無有效框**")
         unannotated = no_json + empty_json
         color = "red" if unannotated > 0 else "green"
         st.markdown(f":{color}[**{unannotated} 張**]")
@@ -100,10 +100,10 @@ def render_output(result: dict) -> None:
     if no_json > 0 and annotated == 0:
         st.info(
             f"尚有 **{total}** 張圖片未開始標注，"
-            "請切換到 **🏷️ Annotation** 頁籤進行標注。"
+            "請前往 Annotation App 的「標注工作台」。"
         )
     elif no_json > 0:
-        st.info(f"還有 **{no_json}** 張圖片尚未標注。")
+        st.info(f"還有 **{no_json}** 張圖片缺少標注檔；空標注檔另計。")
 
     st.divider()
 
@@ -127,7 +127,7 @@ def render_output(result: dict) -> None:
             st.bar_chart(sorted_clf, x_label="分類", y_label="張數")
             st.caption(f"共 {len(clf_counts)} 種分類")
         else:
-            st.caption("無分類資料（module_012 尚未執行）")
+            st.caption("尚未設定整張圖片分類；這不影響 BBox 完成率。")
 
     st.divider()
 
