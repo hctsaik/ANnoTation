@@ -124,8 +124,12 @@ def main() -> None:
             body = page.locator("body").inner_text()
             assert "external-tools" in body and "xanylabeling.exe" in body
             assert page.get_by_role(
-                "button", name=re.compile("選擇 X-AnyLabeling 執行檔")
+                "button", name=re.compile("瀏覽 X-AnyLabeling")
             ).is_visible()
+            assert page.get_by_role(
+                "textbox", name="X-AnyLabeling 執行檔完整路徑"
+            ).is_visible()
+            assert page.get_by_role("button", name="套用完整路徑").is_visible()
 
             page.get_by_text("在網頁直接標注", exact=False).first.click()
             state = None

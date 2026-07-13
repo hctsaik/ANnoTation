@@ -5,6 +5,7 @@ from modules.module_012._external_tools import (
     missing_tool_message,
     relative_tool_path,
     resolve_tool,
+    validate_executable_path,
 )
 
 
@@ -56,3 +57,17 @@ def test_file_picker_accepts_only_expected_executable(tmp_path, monkeypatch):
     wrong.write_bytes(b"launcher")
     Result.stdout = str(wrong)
     assert choose_executable("x-anylabeling") == ""
+
+
+def test_manual_path_validation_accepts_quotes_and_rejects_wrong_name(tmp_path):
+    selected = tmp_path / "xanylabeling.exe"
+    selected.write_bytes(b"launcher")
+    path, error = validate_executable_path("x-anylabeling", f'"{selected}"')
+    assert path == str(selected)
+    assert error == ""
+
+    wrong = tmp_path / "wrong.exe"
+    wrong.write_bytes(b"launcher")
+    path, error = validate_executable_path("x-anylabeling", str(wrong))
+    assert path == ""
+    assert "xanylabeling.exe" in error

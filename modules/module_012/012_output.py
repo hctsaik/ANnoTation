@@ -570,21 +570,48 @@ def _render_missing_tool_picker(tool_id: str) -> None:
         "isat": "ISAT-SAM",
     }
     display_name = display_names.get(tool_id, tool_id)
-    if st.button(
-        f"📁 選擇 {display_name} 執行檔",
-        key=f"m012_choose_external_tool_{tool_id}",
-        help="只保存這台電腦上的執行檔位置；不會複製或上傳檔案。",
-    ):
-        selected = _external_tools.choose_executable(tool_id)
-        if selected:
-            cfg = _cfg.load_config()
-            paths = dict(cfg.get("external_tool_paths", {}))
-            paths[tool_id] = selected
-            cfg["external_tool_paths"] = paths
-            _cfg.save_config(cfg)
-            st.session_state.pop("m012_workspace_result_key", None)
-            st.session_state["m012_launch_ok"] = f"已設定 {display_name}：{selected}"
-            st.rerun()
+    def persist(selected: str) -> None:
+        cfg = _cfg.load_config()
+        paths = dict(cfg.get("external_tool_paths", {}))
+        paths[tool_id] = selected
+        cfg["external_tool_paths"] = paths
+        _cfg.save_config(cfg)
+        st.session_state.pop("m012_workspace_result_key", None)
+        st.session_state["m012_launch_ok"] = f"已設定 {display_name}：{selected}"
+        st.rerun()
+
+    browse_col, apply_col = st.columns([1, 1])
+    with browse_col:
+        if st.button(
+            f"📁 瀏覽 {display_name}",
+            key=f"m012_choose_external_tool_{tool_id}",
+            help="開啟置頂的 Windows 檔案選擇器。",
+            use_container_width=True,
+        ):
+            with st.spinner("正在開啟 Windows 檔案選擇器…"):
+                selected = _external_tools.choose_executable(tool_id)
+            if selected:
+                persist(selected)
+            else:
+                st.warning("未選擇檔案，或選擇器無法顯示。請使用下方完整路徑。")
+
+    manual_path = st.text_input(
+        f"{display_name} 執行檔完整路徑",
+        key=f"m012_external_tool_path_{tool_id}",
+        placeholder=f"C:\\path\\to\\{_external_tools.TOOL_PATHS[tool_id].name}",
+        help="路徑只保存在這台電腦的 App 設定中。",
+    )
+    with apply_col:
+        if st.button(
+            "套用完整路徑",
+            key=f"m012_apply_external_tool_{tool_id}",
+            use_container_width=True,
+        ):
+            selected, error = _external_tools.validate_executable_path(tool_id, manual_path)
+            if error:
+                st.error(error)
+            else:
+                persist(selected)
 
 
 def _proc_alive(proc) -> bool:

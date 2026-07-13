@@ -61,7 +61,11 @@ def choose_executable(tool_id: str) -> str:
         f"$d.Title='{title}';"
         "$d.Filter='Executable (*.exe)|*.exe';"
         "$d.CheckFileExists=$true;"
-        "if($d.ShowDialog() -eq 'OK'){[Console]::Write($d.FileName)}"
+        "$o=New-Object System.Windows.Forms.Form;"
+        "$o.TopMost=$true;$o.ShowInTaskbar=$false;$o.Width=1;$o.Height=1;$o.Opacity=0;"
+        "$o.StartPosition='CenterScreen';$o.Show();$o.Activate();"
+        "$r=$d.ShowDialog($o);$o.Close();$o.Dispose();"
+        "if($r -eq 'OK'){[Console]::Write($d.FileName)}"
     )
     try:
         result = subprocess.run(
@@ -70,7 +74,7 @@ def choose_executable(tool_id: str) -> str:
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=300,
+            timeout=120,
         )
     except Exception:
         return ""
@@ -81,6 +85,19 @@ def choose_executable(tool_id: str) -> str:
     if not path.is_file() or path.name.lower() != expected_name:
         return ""
     return str(path)
+
+
+def validate_executable_path(tool_id: str, raw_path: str) -> tuple[str, str]:
+    value = raw_path.strip().strip('"').strip("'")
+    if not value:
+        return "", "請輸入執行檔完整路徑。"
+    path = Path(value).expanduser()
+    if not path.is_file():
+        return "", f"找不到檔案：{path}"
+    expected_name = TOOL_PATHS[tool_id].name.lower()
+    if path.name.lower() != expected_name:
+        return "", f"請選擇 {expected_name}，目前選到的是 {path.name}。"
+    return str(path), ""
 
 
 def missing_tool_message(tool_id: str, display_name: str, executable: str) -> str | None:
