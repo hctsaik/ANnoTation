@@ -39,6 +39,76 @@ _MAX_ENCODE_DIM = 2048                       # 編碼 JPEG 的最大邊長(座�
 _DATAURL_CACHE: dict[str, tuple[str, int, int]] = {}   # (path|mtime|maxdim) → (data_url, w, h)
 
 
+def _sidecar_to_canvas_boxes(sidecar: dict) -> list[dict]:
+    """Read rectangle shapes without depending on the platform plugin package."""
+    boxes: list[dict] = []
+    for shape in sidecar.get("shapes", []):
+        if shape.get("shape_type") != "rectangle":
+            continue
+        points = shape.get("points") or []
+        if len(points) < 2:
+            continue
+        xs = [float(point[0]) for point in points]
+        ys = [float(point[1]) for point in points]
+        x1, y1, x2, y2 = min(xs), min(ys), max(xs), max(ys)
+        boxes.append({
+            "label": shape.get("label", ""),
+            "x": x1,
+            "y": y1,
+            "w": x2 - x1,
+            "h": y2 - y1,
+            "score": shape.get("score"),
+        })
+    return boxes
+
+
+def _canvas_boxes_to_sidecar(
+    boxes: list[dict], image_name: str, image_width: int, image_height: int,
+    *, keep_shapes: list[dict] | None = None,
+) -> dict:
+    """Create an X-AnyLabeling sidecar using only the Python standard library."""
+    iw, ih = float(image_width), float(image_height)
+    shapes: list[dict] = []
+    for box in boxes:
+        try:
+            x, y = float(box["x"]), float(box["y"])
+            width, height = float(box["w"]), float(box["h"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        label = str(box.get("label", "")).strip()
+        if not label:
+            continue
+        x1, y1 = max(0.0, min(x, x + width)), max(0.0, min(y, y + height))
+        x2, y2 = min(iw, max(x, x + width)), min(ih, max(y, y + height))
+        if x2 <= x1 or y2 <= y1:
+            continue
+        try:
+            score = float(box["score"]) if box.get("score") is not None else None
+        except (TypeError, ValueError):
+            score = None
+        shapes.append({
+            "label": label,
+            "score": score,
+            "points": [[round(x1, 2), round(y1, 2)], [round(x2, 2), round(y2, 2)]],
+            "group_id": None,
+            "description": "",
+            "difficult": False,
+            "shape_type": "rectangle",
+            "flags": {},
+            "attributes": {},
+        })
+    shapes.extend(keep_shapes or [])
+    return {
+        "version": "2.4.0",
+        "flags": {},
+        "shapes": shapes,
+        "imagePath": image_name,
+        "imageData": None,
+        "imageHeight": int(ih),
+        "imageWidth": int(iw),
+    }
+
+
 def _img_data_url(image_path: str) -> tuple[str, int, int]:
     """影像 → (data URL, 原圖 width, 原圖 height)。
 
@@ -486,18 +556,13 @@ def render_canvas_editor(image_path: str, classes: list[str], *, key: str,
     import streamlit as st
     import streamlit.components.v1 as components
 
-    from plugins.labeling.domain.adapters.canvas_boxes import (
-        canvas_boxes_to_sidecar,
-        sidecar_to_canvas_boxes,
-    )
-
     sidecar_path = Path(image_path).with_suffix(".json")
     existing = []
     keep_shapes: list[dict] = []   # 非矩形形狀(編輯器不碰),存檔時原樣保留
     if sidecar_path.exists():
         try:
             _sc = json.loads(sidecar_path.read_text(encoding="utf-8"))
-            existing = sidecar_to_canvas_boxes(_sc)
+            existing = _sidecar_to_canvas_boxes(_sc)
             keep_shapes = [s for s in _sc.get("shapes", [])
                            if s.get("shape_type") != "rectangle"]
         except Exception:
@@ -517,7 +582,7 @@ def render_canvas_editor(image_path: str, classes: list[str], *, key: str,
             # 只在看到「新的」nonce 時寫檔，避免每次 rerun 重複寫。
             if _nonce and st.session_state.get(_nonce_key) != _nonce:
                 st.session_state[_nonce_key] = _nonce
-                sidecar = canvas_boxes_to_sidecar(
+                sidecar = _canvas_boxes_to_sidecar(
                     _boxes, Path(image_path).name, iw, ih, keep_shapes=keep_shapes)
                 sidecar_path.write_text(
                     json.dumps(sidecar, ensure_ascii=False, indent=2), encoding="utf-8")
