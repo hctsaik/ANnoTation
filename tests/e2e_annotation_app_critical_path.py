@@ -18,7 +18,7 @@ from playwright.sync_api import Page, sync_playwright
 
 
 URL = os.environ.get("ANNOTATION_APP_URL", "http://127.0.0.1:64950")
-NAV_LABELS = ("總覽", "資料來源", "標注工作台", "標籤管理", "審核", "匯出 / 回傳")
+NAV_LABELS = ("資料集", "標注", "審核", "匯出")
 FATAL_TEXT = (
     "Traceback:",
     "IndexError:",
@@ -88,12 +88,12 @@ def main() -> None:
         probe = AppProbe(page)
         try:
             page.goto(URL, wait_until="domcontentloaded", timeout=30_000)
-            page.get_by_role("button", name="標注工作台", exact=True).wait_for(
+            page.get_by_role("button", name="標注", exact=True).wait_for(
                 state="visible", timeout=45_000
             )
             probe.healthy("startup")
 
-            probe.navigate("資料來源")
+            probe.navigate("資料集")
             path_input = page.get_by_label("資料夾路徑")
             path_input.fill(r"Z:\annotation-e2e-definitely-missing")
             path_input.press("Enter")
@@ -105,7 +105,8 @@ def main() -> None:
             ).first.is_disabled()
             probe.healthy("data-source:invalid-path-guard")
 
-            probe.navigate("標注工作台")
+            probe.navigate("標注")
+            page.get_by_text(re.compile(r"顯示 \d+ 張"), exact=True).wait_for(timeout=45_000)
             total_match = re.search(r"顯示 (\d+) 張", page.locator("body").inner_text())
             assert total_match, "workspace: total result count is missing"
             total_count = int(total_match.group(1))
@@ -120,6 +121,8 @@ def main() -> None:
 
             page.get_by_role("button", name="開啟標注").first.click()
             probe.healthy("workspace:launch-desktop-annotation")
+            body = page.locator("body").inner_text()
+            assert "external-tools" in body and "xanylabeling.exe" in body
 
             page.get_by_text("在網頁直接標注", exact=False).first.click()
             state = None
@@ -133,19 +136,20 @@ def main() -> None:
             assert state["curClass"]
             probe.healthy("workspace:web-canvas-mounted")
 
-            probe.navigate("標籤管理")
-            page.get_by_role("tab").nth(1).click()
+            probe.navigate("資料集")
+            page.get_by_role("tab", name=re.compile("標籤管理")).first.click()
+            page.get_by_role("tab").last.click()
             probe.healthy("labels:management-tab")
 
             probe.navigate("審核")
             assert page.get_by_label("QA 狀態").is_visible()
             probe.healthy("review:queue-and-filter")
 
-            probe.navigate("匯出 / 回傳")
+            probe.navigate("匯出")
             assert "標注完整性" in page.locator("body").inner_text()
             probe.healthy("export:preflight-summary")
 
-            probe.navigate("總覽")
+            probe.navigate("標注")
             report["steps"] = probe.steps
         except Exception:
             screenshot = Path(tempfile.gettempdir()) / "annotation-e2e-critical-failure.png"

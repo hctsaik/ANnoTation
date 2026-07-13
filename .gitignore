@@ -6,3 +6,5 @@ __pycache__/
 
 # Local Streamlit secrets
 .streamlit/secrets.toml
+external-tools/**
+!external-tools/README.md

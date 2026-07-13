@@ -20,12 +20,12 @@ QA 退回佇列另取得 92 分。最新可重跑驗收對上述五類流程皆�
 
 另新增零容忍 critical path，共 15 個連續檢查點，涵蓋：啟動、資料來源錯誤防護、
 待標注篩選與清除、桌面標註工具啟動、網頁 canvas 掛載、標籤管理、審核、匯出與總覽。
-每次互動後都檢查主內容非空、六個 Sheet 導覽仍存在、無水平溢位，且不得出現
+每次互動後都檢查主內容非空、四個產品階段導覽仍存在、無水平溢位，且不得出現
 browser `pageerror`、console error、Traceback、IndexError、ModuleNotFoundError 或功能載入失敗。
 
 ## 主要改善
 
-- 將平台 Input / Process / Output 拆頁整合為 App 內的總覽、資料來源、工作台、標籤、審核、匯出 Sheet。
+- 將頂層導覽收斂成資料集、標注、審核、匯出；資料來源與標籤管理置於資料集子頁籤，總覽指標直接併入標注工作台。
 - 移除首屏過量留白；桌面首屏可直接看到工作項目，mobile KPI 改為 2×2。
 - 待標注 CTA、active filter、清除全部與 `aria-live` 結果數形成完整可逆流程。
 - standalone 模式採明確重新掃描，避免週期 rerun 與篩選互動競態；每頁由 50 降至 20 張。
@@ -34,6 +34,7 @@ browser `pageerror`、console error、Traceback、IndexError、ModuleNotFoundErr
 - 審核提供 QA 狀態、佇列統計、審核者與時間責任資訊。
 - 匯出在完整性與審核未通過時預設阻擋；部分匯出需要明確 opt-in。
 - fail-fast runner 逐支執行 critical path、canvas 專項與五情境驗收；任一子測試失敗即回傳非零狀態。
+- 桌面標註工具統一由 `external-tools/<工具>/.venv/Scripts/` 相對目錄解析；缺檔時顯示指定路徑，不洩漏 Windows 原始啟動錯誤。
 
 ## 重跑
 

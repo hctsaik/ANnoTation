@@ -42,6 +42,10 @@ _cfg_spec = _ilu.spec_from_file_location("_012_config", _HERE / "_config.py")
 _cfg = _ilu.module_from_spec(_cfg_spec)
 _cfg_spec.loader.exec_module(_cfg)
 
+_tools_spec = _ilu.spec_from_file_location("_012_output_external_tools", _HERE / "_external_tools.py")
+_external_tools = _ilu.module_from_spec(_tools_spec)
+_tools_spec.loader.exec_module(_external_tools)
+
 _mdb_spec = _ilu.spec_from_file_location(
     "_manifest_db", _HERE.parents[3] / "scripts" / "shared" / "_manifest_db.py"
 )
@@ -421,6 +425,11 @@ def _launch_xany(file_path: str, labels: list[str], classes_path: str,
     folder_mode=True 時 file_path 應為資料夾路徑，output 指向同一資料夾。
     """
     try:
+        missing = _external_tools.missing_tool_message(
+            "x-anylabeling", "X-AnyLabeling", xany_exe
+        )
+        if missing:
+            return missing, None
         classes_txt = Path(classes_path) if classes_path else None
         out_dir = Path(file_path) if folder_mode else Path(file_path).parent
         xany_args = [
@@ -541,8 +550,12 @@ def _launch_annotation_tool(
     _log.info("[012] _launch_annotation_tool tool=%s isat_exe=%s file=%s",
               annotation_tool, isat_exe, file_path)
     if annotation_tool == "labelme":
+        if missing := _external_tools.missing_tool_message("labelme", "LabelMe", labelme_exe):
+            return "LabelMe", missing
         return "LabelMe", _launch_labelme(file_path, classes_path, labelme_exe)
     if annotation_tool == "isat":
+        if missing := _external_tools.missing_tool_message("isat", "ISAT-SAM", isat_exe):
+            return "ISAT", missing
         return "ISAT", _launch_isat(file_path, isat_exe)
     err, _proc = _launch_xany(
         file_path, labels, classes_path, xany_work_dir, xany_exe, ann_path=ann_path

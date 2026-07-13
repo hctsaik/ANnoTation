@@ -1,5 +1,8 @@
 # Labeling plugin
 
+桌面標註工具的可攜式目錄規格見 [`external-tools/README.md`](external-tools/README.md)。
+未部署外部工具時，內建網頁 Canvas 仍可獨立完成標注。
+
 Labeling 是 CIM 平台上的**一個（重要）plugin**，不是平台本身。這個目錄是 Labeling
 的**單一宣告入口**：要找 Labeling 擁有哪些東西，看 [`plugin.manifest.yaml`](plugin.manifest.yaml)。
 

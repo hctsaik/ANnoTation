@@ -54,6 +54,9 @@ def _load_xany_launch_namespace() -> dict:
         "subprocess": subprocess,
         "sys": sys,
         "os": os,
+        "_external_tools": type(
+            "_ToolsStub", (), {"missing_tool_message": staticmethod(lambda *_args: None)}
+        ),
     }
     exec(compile(ast.Module(body=functions, type_ignores=[]), "012_output.py", "exec"), namespace)
     return namespace

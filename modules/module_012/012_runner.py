@@ -52,12 +52,10 @@ _TOOLS = {
 }
 
 _STAGES = (
-    ("overview", "總覽", "015", "更新總覽"),
-    ("data", "資料來源", "026|010", "建立資料集並開始標注"),
-    ("workspace", "標注工作台", "012", ""),
-    ("labels", "標籤管理", "017", "掃描標籤與影響"),
+    ("data", "資料集", "026|010", "建立資料集並開始標注"),
+    ("workspace", "標注", "012", ""),
     ("review", "審核", "018", "更新審核清單"),
-    ("export", "匯出 / 回傳", "014", "建立匯出"),
+    ("export", "匯出", "014", "建立匯出"),
 )
 
 
@@ -92,6 +90,12 @@ def _render_stage_navigation() -> str:
         st.session_state["m012_stage_nav"] = next_stage
     if "m012_app_stage" not in st.session_state:
         st.session_state["m012_app_stage"] = "workspace"
+    legacy_stage = {"overview": "workspace", "labels": "data"}.get(
+        st.session_state["m012_app_stage"]
+    )
+    if legacy_stage:
+        st.session_state["m012_app_stage"] = legacy_stage
+        st.session_state["m012_stage_nav"] = legacy_stage
     labels = {stage: label for stage, label, _module_id, _action in _STAGES}
     selected = st.pills(
         "Annotation workflow",
@@ -239,6 +243,14 @@ def _render_composed_feature(stage: str, module_id: str, action_label: str) -> N
                 help="確認前請完成必要的抽查、旗標處理與異常修正。",
             )
         output_module.render_output(st.session_state[result_key])
+
+
+def _render_dataset_stage() -> None:
+    source_tab, labels_tab = st.tabs(["資料來源", "標籤管理"])
+    with source_tab:
+        _render_composed_feature("data", "026|010", "建立資料集並開始標注")
+    with labels_tab:
+        _render_composed_feature("labels", "017", "掃描標籤與影響")
 
 
 def _load_from(directory: Path, name: str, filename: str):
@@ -420,6 +432,9 @@ def main() -> None:
         st.session_state["m012_app_stage"] = "workspace" if manifests else "data"
     stage = _render_stage_navigation()
 
+    if stage == "data":
+        _render_dataset_stage()
+        return
     if stage != "workspace":
         _selected = next(item for item in _STAGES if item[0] == stage)
         _render_composed_feature(stage, _selected[2], _selected[3])
@@ -427,8 +442,8 @@ def main() -> None:
 
     if not manifests:
         st.info(
-            "目前沒有可標注的資料集。請先到「資料來源」建立資料集，"
-            "再回到標注工作台；工作台會自動接續。"
+            "目前沒有可標注的資料集。請先到「資料集」建立來源，"
+            "再回到標注；工作台會自動接續。"
         )
         if st.button("重新檢查資料集", type="primary"):
             st.rerun()
@@ -464,6 +479,16 @@ def main() -> None:
             st.session_state.pop("m012_workspace_result_key", None)
             st.rerun()
         return
+
+    total = int(result.get("total", 0))
+    annotated = int(result.get("annotated", 0))
+    pending = max(0, total - annotated)
+    progress = round(annotated * 100 / total) if total else 0
+    overview_cols = st.columns(4)
+    overview_cols[0].metric("總圖片", total)
+    overview_cols[1].metric("已標注", annotated)
+    overview_cols[2].metric("待標注", pending)
+    overview_cols[3].metric("完成度", f"{progress}%")
 
     # In the standalone shell refresh is explicit. Periodic full-page reruns can
     # race a filter interaction on large datasets and replace its visible result.

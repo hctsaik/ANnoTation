@@ -9,7 +9,6 @@ import importlib.util as _ilu
 import json
 import logging
 import os
-import sys
 from pathlib import Path
 
 # ─── Logger 設定 ──────────────────────────────────────────────────────────────
@@ -33,13 +32,17 @@ _cfg_spec = _ilu.spec_from_file_location("_012_config", _HERE / "_config.py")
 _cfg = _ilu.module_from_spec(_cfg_spec)
 _cfg_spec.loader.exec_module(_cfg)
 
+_tools_spec = _ilu.spec_from_file_location("_012_external_tools", _HERE / "_external_tools.py")
+_external_tools = _ilu.module_from_spec(_tools_spec)
+_tools_spec.loader.exec_module(_external_tools)
+
 _mdb_spec = _ilu.spec_from_file_location(
     "_manifest_db", _HERE.parents[3] / "scripts" / "shared" / "_manifest_db.py"
 )
 _mdb = _ilu.module_from_spec(_mdb_spec)
 _mdb_spec.loader.exec_module(_mdb)
 
-_PROJECT_ROOT = Path(__file__).parents[6]
+_PROJECT_ROOT = Path(getattr(_cfg, "_PROJECT_ROOT", Path(__file__).parents[6]))
 
 
 # ─── 輔助函式 ─────────────────────────────────────────────────────────────────
@@ -87,27 +90,15 @@ def _count_shapes(ann_path: str) -> int:
 
 def get_xany_exe() -> str:
     """回傳 X-AnyLabeling 執行檔路徑。"""
-    candidates = [
-        _PROJECT_ROOT / ".venv-xanylabeling" / "Scripts" / "xanylabeling.exe",
-    ]
-    for c in candidates:
-        if c.exists():
-            return str(c)
-    return "xanylabeling"
+    return _external_tools.resolve_tool("x-anylabeling", _PROJECT_ROOT, _HERE)
 
 
 def get_labelme_exe() -> str:
     """回傳 LabelMe 執行檔路徑。"""
     env_exe = os.environ.get("LABELME_EXE", "")
-    candidates = [
-        Path(env_exe) if env_exe else None,
-        _PROJECT_ROOT.parent / "LabelMe_Dino" / ".venv" / "Scripts" / "labelme.exe",
-        _PROJECT_ROOT / "LabelMe_Dino" / ".venv" / "Scripts" / "labelme.exe",
-    ]
-    for c in candidates:
-        if c and c.exists():
-            return str(c)
-    return "labelme"
+    if env_exe and Path(env_exe).is_file():
+        return env_exe
+    return _external_tools.resolve_tool("labelme", _PROJECT_ROOT, _HERE)
 
 
 def get_isat_exe() -> str:
@@ -115,13 +106,7 @@ def get_isat_exe() -> str:
     env_exe = os.environ.get("ISAT_EXE", "")
     if env_exe and Path(env_exe).exists():
         return env_exe
-    # Streamlit 子程序的 PATH 不一定含 Scripts；直接查 python 同層的 Scripts 目錄
-    scripts_dir = Path(sys.executable).parent / "Scripts"
-    for name in ("isat-sam.exe", "isat-sam"):
-        candidate = scripts_dir / name
-        if candidate.exists():
-            return str(candidate)
-    return "isat-sam"
+    return _external_tools.resolve_tool("isat", _PROJECT_ROOT, _HERE)
 
 
 # ─── 公開 API ─────────────────────────────────────────────────────────────────

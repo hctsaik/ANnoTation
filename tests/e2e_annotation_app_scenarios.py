@@ -32,7 +32,7 @@ def text(page: Page) -> str:
 
 
 def go(page: Page, label: str) -> None:
-    page.get_by_text(label, exact=True).first.click()
+    page.get_by_role("button", name=label, exact=True).click()
     settle(page, 3500)
 
 
@@ -53,7 +53,7 @@ def main() -> None:
         checks = {
             "app_sheet": all(
                 item in page_text
-                for item in ("總覽", "資料來源", "標注工作台", "標籤管理", "審核", "匯出 / 回傳")
+                for item in ("資料集", "標注", "審核", "匯出")
             ),
             "pending_cta": "標注最後 1 張" in page_text,
             "detail_above_fold": "frame_00000.jpg" in page_text,
@@ -64,9 +64,14 @@ def main() -> None:
         page.get_by_text("清除全部篩選", exact=True).click()
         settle(page)
         checks["filter_reversible"] = "顯示 1382 張" in text(page)
-        nav = page.get_by_text("標注工作台", exact=True).bounding_box()
+        nav = page.get_by_text("標注", exact=True).bounding_box()
+        overview_metric = page.get_by_text("總圖片", exact=True).first.bounding_box()
         heading = page.get_by_text("🏷️ car_1", exact=True).bounding_box()
-        checks["compact_layout"] = bool(nav and heading and heading["y"] - nav["y"] < 180)
+        checks["compact_layout"] = bool(
+            nav and overview_metric and heading
+            and overview_metric["y"] - nav["y"] < 180
+            and heading["y"] - nav["y"] < 320
+        )
         checks["standalone_language"] = not any(
             legacy in page_text for legacy in ("Follow Input", "Follow Output", "Process")
         )
@@ -74,7 +79,7 @@ def main() -> None:
         page.close()
 
         page = open_app(browser)
-        go(page, "資料來源")
+        go(page, "資料集")
         page_text = text(page)
         checks = {
             "source_choices": all(item in page_text for item in ("資料夾", "資料庫", "API")),
@@ -100,7 +105,8 @@ def main() -> None:
         page.close()
 
         page = open_app(browser)
-        go(page, "標籤管理")
+        go(page, "資料集")
+        page.get_by_role("tab", name=re.compile("標籤管理")).first.click()
         settle(page, 5000)
         page_text = text(page)
         checks = {
@@ -108,7 +114,7 @@ def main() -> None:
             "statistics": "統計總覽" in page_text,
             "management_tab": "標籤管理" in page_text,
         }
-        page.get_by_role("tab", name=re.compile("標籤管理")).click()
+        page.get_by_role("tab", name=re.compile("標籤管理")).last.click()
         settle(page)
         page_text = text(page)
         checks["governance_controls"] = any(
@@ -142,7 +148,7 @@ def main() -> None:
         page.close()
 
         page = open_app(browser)
-        go(page, "匯出 / 回傳")
+        go(page, "匯出")
         page_text = text(page)
         checks = {
             "completion_summary": all(item in page_text for item in ("標注完整性", "待標注")),
@@ -154,7 +160,7 @@ def main() -> None:
         if confirmation.count():
             confirmation.first.click()
             settle(page)
-        go(page, "匯出 / 回傳")
+        go(page, "匯出")
         page_text = text(page)
         checks["review_persists"] = any(
             item in page_text for item in ("審核已確認", "已完成審核", "審核狀態")
