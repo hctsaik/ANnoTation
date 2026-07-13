@@ -190,6 +190,7 @@ def editor_html(image_data_url: str, boxes: list[dict], classes: list[str],
     <button id="undo" title="Ctrl+Z 復原">↶</button>
     <button id="redo" title="Ctrl+Y / Ctrl+Shift+Z 重做">↷</button>
     <button id="fitbtn" title="f / 0 全圖">⤢</button>
+    <button id="panBtn" title="移動畫布：左鍵拖曳；也可隨時用滑鼠中鍵或 Space＋左鍵">✋ 移動</button>
     <button id="labelsBtn" title="l 標籤開關">標籤</button>
     <button id="crossBtn" title="x 十字輔助線">十字</button>
     <button id="sweepBtn" title="刪除過小的框">掃小框</button>
@@ -198,7 +199,7 @@ def editor_html(image_data_url: str, boxes: list[dict], classes: list[str],
     <span id="status" style="font-size:12px;color:#16a34a;"></span>
   </div>
   <div id="holder"><canvas id="cv" tabindex="0"></canvas><div id="readout"></div><div id="legend"></div></div>
-  <div id="hint">把手改大小(Alt=中心對稱)·框內點選最小框(重複點/Alt+點循環重疊)·空白拖曳畫新框·方向鍵移動/Alt改大小·Del刪·Ctrl+Z/Y復原重做·Tab或[ ]切框·+/-/f/z縮放·l標籤 x十字·Ctrl+S存檔</div>
+  <div id="hint">滾輪縮放·✋移動/中鍵拖曳/Space+左鍵平移·把手改大小(Alt=中心對稱)·空白拖曳畫框·方向鍵微調·Del刪·Ctrl+Z/Y復原重做·Ctrl+S存檔</div>
 </div>
 <script>
 const CFG = __CFG__;
@@ -207,7 +208,7 @@ const CFG = __CFG__;
   const cv = $('cv'), ctx = cv.getContext('2d'), holder = $('holder');
   const readout = $('readout'), legend = $('legend'), statusEl = $('status'), dirtyDot = $('dirtyDot');
   const clsSearch = $('clsSearch'), clsMenu = $('clsMenu');
-  const labelsBtn = $('labelsBtn'), crossBtn = $('crossBtn');
+  const labelsBtn = $('labelsBtn'), crossBtn = $('crossBtn'), panBtn = $('panBtn');
   const dpr = window.devicePixelRatio || 1;
   const img = new Image();
   const MIN = 3, TOL = 8;                    // 最小框邊(影像px)、把手命中容差(螢幕px)
@@ -221,7 +222,7 @@ const CFG = __CFG__;
   const colorOf = name => colors[Math.max(0, classes.indexOf(name)) % colors.length];
 
   let scale = 1, ox = 0, oy = 0, baseScale = 1, fitted = false, cssW = 0, cssH = 0;
-  let sel = -1, drag = null, panning = false, spaceDown = false;
+  let sel = -1, drag = null, panning = false, spaceDown = false, panMode = false;
   const hist = [], redo = [];
   let dirty = false;
   const hidden = new Set(); let soloClass = null, labelsOff = false, crosshair = false;
@@ -379,7 +380,7 @@ const CFG = __CFG__;
   function sweepTiny(){ snapshot(); boxes=boxes.filter(b=>b.w>=MIN && b.h>=MIN); sel=-1; markDirty(); renderLegend(); draw(); }
 
   function cursorFor(m){
-    if(spaceDown) return panning?'grabbing':'grab';
+    if(spaceDown || panMode) return panning?'grabbing':'grab';
     if(sel>=0){ const k=handleAt(boxes[sel],m); if(k) return HC[k]; }
     for(let i=boxes.length-1;i>=0;i--){ if(!isVisible(i)) continue; const k=handleAt(boxes[i],m); if(k) return HC[k]; }
     for(let i=boxes.length-1;i>=0;i--){ if(isVisible(i) && hitBox(boxes[i],m)) return 'move'; }
@@ -388,11 +389,14 @@ const CFG = __CFG__;
 
   // ── 指標互動 ──────────────────────────────────────────────────────────────────
   cv.addEventListener('pointerdown', e=>{
-    if(e.button!==0 && e.pointerType==='mouse') return;
+    const middlePan = e.pointerType==='mouse' && e.button===1;
+    if(e.pointerType==='mouse' && e.button!==0 && !middlePan) return;
     cv.focus(); try{ cv.setPointerCapture(e.pointerId); }catch(_){}
     const r=cv.getBoundingClientRect(), m=toImg(e.clientX-r.left, e.clientY-r.top);
     e.preventDefault();
-    if(spaceDown){ panning={px:e.clientX,py:e.clientY,ox,oy}; return; }
+    if(spaceDown || panMode || middlePan){
+      panning={px:e.clientX,py:e.clientY,ox,oy}; cv.style.cursor='grabbing'; return;
+    }
     // 1) 把手(已選優先,再任一框);Alt 拖把手 = 中心對稱縮放
     let hi=-1,hk=null;
     if(sel>=0){ const k=handleAt(boxes[sel],m); if(k){ hi=sel; hk=k; } }
@@ -436,7 +440,7 @@ const CFG = __CFG__;
       else if(drag.moved) markDirty();
       renderLegend(); draw();
     }
-    drag=null; panning=false;
+    drag=null; panning=false; cv.style.cursor=(spaceDown||panMode)?'grab':'crosshair';
   }
   cv.addEventListener('pointerup', endDrag);
   cv.addEventListener('pointercancel', endDrag);
@@ -451,6 +455,8 @@ const CFG = __CFG__;
     const x2=clamp(b.x+b.w+dx,b.x+MIN,CFG.iw), y2=clamp(b.y+b.h+dy,b.y+MIN,CFG.ih); b.w=x2-b.x; b.h=y2-b.y; markDirty(); draw(); }
   function toggleLabels(){ labelsOff=!labelsOff; labelsBtn.classList.toggle('on',labelsOff); draw(); }
   function toggleCross(){ crosshair=!crosshair; crossBtn.classList.toggle('on',crosshair); draw(); }
+  function togglePan(){ panMode=!panMode; panBtn.classList.toggle('on',panMode);
+    cv.style.cursor=panMode?'grab':'crosshair'; }
 
   document.addEventListener('keydown', e=>{
     const ae=document.activeElement;
@@ -485,7 +491,7 @@ const CFG = __CFG__;
     if(e.key==='p'||e.key==='P'||e.key==='PageUp'){ navImg(-1); e.preventDefault(); return; }
     if(e.key>='1' && e.key<='9'){ const i=+e.key-1; if(i<classes.length) assignClass(classes[i]); e.preventDefault(); return; }
   });
-  document.addEventListener('keyup', e=>{ if(e.code==='Space'){ spaceDown=false; cv.style.cursor='crosshair'; } });
+  document.addEventListener('keyup', e=>{ if(e.code==='Space'){ spaceDown=false; cv.style.cursor=panMode?'grab':'crosshair'; } });
   window.addEventListener('beforeunload', e=>{ if(dirty){ e.preventDefault(); e.returnValue=''; } });
 
   // ── 存檔(💾 / Ctrl+S):回灌 parent 的隱藏 Streamlit widget,帶 nonce ──────────────
@@ -515,7 +521,7 @@ const CFG = __CFG__;
   function navImg(dir){ if(dirty && !window.confirm('有未存檔的變更,確定要換圖?(取消後可先按 💾 存檔)')) return; navParent(dir); }
 
   $('undo').onclick=undo; $('redo').onclick=redoFn; $('fitbtn').onclick=resetFit; $('save').onclick=doSave;
-  labelsBtn.onclick=toggleLabels; crossBtn.onclick=toggleCross; $('sweepBtn').onclick=sweepTiny;
+  panBtn.onclick=togglePan; labelsBtn.onclick=toggleLabels; crossBtn.onclick=toggleCross; $('sweepBtn').onclick=sweepTiny;
   $('prevImg').onclick=()=>navImg(-1); $('nextImg').onclick=()=>navImg(1);
 
   function resizeFrame(){ try{ const fe=window.frameElement;
@@ -526,11 +532,11 @@ const CFG = __CFG__;
   try{ window.__m012canvas = {
     state:()=>({boxes:boxes.map(b=>({...b})), sel, scale, ox, oy, cssW, cssH, dirty,
       canUndo:hist.length>0, canRedo:redo.length>0, hidden:[...hidden], solo:soloClass,
-      labelsOff, crosshair, baseScale, curClass, zoomPct:Math.round(scale/baseScale*100)}),
+      labelsOff, crosshair, panMode, baseScale, curClass, zoomPct:Math.round(scale/baseScale*100)}),
     api:{ undo, redo:redoFn, save:doSave, fit:resetFit, zoomToSel, cycleSel,
       toggleHidden:l=>{ if(hidden.has(l)) hidden.delete(l); else hidden.add(l); renderLegend(); draw(); },
       solo:l=>{ soloClass = soloClass===l?null:l; renderLegend(); draw(); },
-      toggleLabels, toggleCrosshair:toggleCross, bringToFront, sendToBack, sweepTiny,
+      toggleLabels, toggleCrosshair:toggleCross, togglePan, bringToFront, sendToBack, sweepTiny,
       setClass:assignClass, order:()=>boxes.map(b=>b.label),
       next:()=>navParent(1), prev:()=>navParent(-1) } };
   }catch(_){}
