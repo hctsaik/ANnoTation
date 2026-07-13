@@ -563,6 +563,30 @@ def _launch_annotation_tool(
     return "X-AnyLabeling", err
 
 
+def _render_missing_tool_picker(tool_id: str) -> None:
+    display_names = {
+        "x-anylabeling": "X-AnyLabeling",
+        "labelme": "LabelMe",
+        "isat": "ISAT-SAM",
+    }
+    display_name = display_names.get(tool_id, tool_id)
+    if st.button(
+        f"📁 選擇 {display_name} 執行檔",
+        key=f"m012_choose_external_tool_{tool_id}",
+        help="只保存這台電腦上的執行檔位置；不會複製或上傳檔案。",
+    ):
+        selected = _external_tools.choose_executable(tool_id)
+        if selected:
+            cfg = _cfg.load_config()
+            paths = dict(cfg.get("external_tool_paths", {}))
+            paths[tool_id] = selected
+            cfg["external_tool_paths"] = paths
+            _cfg.save_config(cfg)
+            st.session_state.pop("m012_workspace_result_key", None)
+            st.session_state["m012_launch_ok"] = f"已設定 {display_name}：{selected}"
+            st.rerun()
+
+
 def _proc_alive(proc) -> bool:
     """subprocess 是否仍在執行中。"""
     if proc is None:
@@ -595,6 +619,8 @@ def _relaunch_xany_at(
         _err, _new = _launch_xany(fp, labels, classes_path, xany_work_dir, xany_exe)
     if _err:
         st.session_state["m012_launch_error"] = _err
+        if "找不到" in _err and "執行檔" in _err:
+            st.session_state["m012_missing_tool_id"] = "x-anylabeling"
         st.session_state["m012_folder_proc"] = None
     else:
         st.session_state["m012_folder_proc"] = _new
@@ -1429,6 +1455,8 @@ hr, [data-testid="stDivider"] { margin: 0.45rem 0 !important; }
         st.success(f"🖊 {_launch_ok}")
     if _launch_err := st.session_state.pop("m012_launch_error", None):
         st.error(f"啟動失敗：{_launch_err}")
+        if _missing_tool_id := st.session_state.pop("m012_missing_tool_id", None):
+            _render_missing_tool_picker(_missing_tool_id)
 
     # pre-flight：ISAT 選為標注工具但 isat-sam 找不到時提早警告
     if annotation_tool == "isat" and not Path(isat_exe).exists() and not shutil.which(isat_exe):
@@ -1524,6 +1552,8 @@ hr, [data-testid="stDivider"] { margin: 0.45rem 0 !important; }
                         )
                     if _err:
                         st.session_state["m012_launch_error"] = _err
+                        if "找不到" in _err and "執行檔" in _err:
+                            st.session_state["m012_missing_tool_id"] = "x-anylabeling"
                     else:
                         st.session_state["m012_folder_proc"] = _proc
                         st.session_state["m012_folder_enhanced_mode"] = bool(_enh_ready)
@@ -1935,6 +1965,8 @@ hr, [data-testid="stDivider"] { margin: 0.45rem 0 !important; }
                                     )
                                 if err:
                                     st.session_state["m012_launch_error"] = err
+                                    if "找不到" in err and "執行檔" in err:
+                                        st.session_state["m012_missing_tool_id"] = annotation_tool
                                 else:
                                     st.session_state["m012_launch_ok"] = (
                                         f"🚀 {tool_name} 啟動中…（{fname}，視窗約 3-5 秒後出現）"

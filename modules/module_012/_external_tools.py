@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
 from pathlib import Path
 
 
@@ -21,8 +22,12 @@ def relative_tool_path(tool_id: str) -> Path:
     return Path("external-tools") / TOOL_PATHS[tool_id]
 
 
-def resolve_tool(tool_id: str, project_root: Path, module_dir: Path) -> str:
+def resolve_tool(
+    tool_id: str, project_root: Path, module_dir: Path, explicit_path: str = ""
+) -> str:
     """Resolve a bundled tool first, then PATH; return the expected local path if missing."""
+    if explicit_path and Path(explicit_path).expanduser().is_file():
+        return str(Path(explicit_path).expanduser())
     override_root = os.environ.get("ANNOTATION_EXTERNAL_TOOLS_DIR", "").strip()
     roots = []
     if override_root:
@@ -45,12 +50,45 @@ def resolve_tool(tool_id: str, project_root: Path, module_dir: Path) -> str:
     return str(roots[0] / TOOL_PATHS[tool_id])
 
 
+def choose_executable(tool_id: str) -> str:
+    """Open the local Windows file picker and return a validated executable path."""
+    expected_name = TOOL_PATHS[tool_id].name.lower()
+    title = f"選擇 {expected_name}"
+    script = (
+        "[Console]::OutputEncoding=[Text.Encoding]::UTF8;"
+        "Add-Type -AssemblyName System.Windows.Forms;"
+        "$d=New-Object System.Windows.Forms.OpenFileDialog;"
+        f"$d.Title='{title}';"
+        "$d.Filter='Executable (*.exe)|*.exe';"
+        "$d.CheckFileExists=$true;"
+        "if($d.ShowDialog() -eq 'OK'){[Console]::Write($d.FileName)}"
+    )
+    try:
+        result = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-STA", "-Command", script],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=300,
+        )
+    except Exception:
+        return ""
+    selected = result.stdout.strip()
+    if result.returncode != 0 or not selected:
+        return ""
+    path = Path(selected)
+    if not path.is_file() or path.name.lower() != expected_name:
+        return ""
+    return str(path)
+
+
 def missing_tool_message(tool_id: str, display_name: str, executable: str) -> str | None:
     if Path(executable).is_file() or shutil.which(executable):
         return None
-    relative = str(relative_tool_path(tool_id))
+    relative = relative_tool_path(tool_id).as_posix()
     return (
         f"找不到 {display_name} 執行檔。\n\n"
-        f"請將完整工具環境放到 App 相對目錄：\n  {relative}\n\n"
-        f"目前檢查的位置：\n  {executable}"
+        f"請將完整工具環境放到 App 相對目錄：\n\n`{relative}`\n\n"
+        f"目前檢查的位置：\n\n`{executable}`"
     )

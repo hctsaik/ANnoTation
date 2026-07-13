@@ -28,6 +28,7 @@ _DEFAULTS: dict = {
     "autorefresh_enabled": True,
     "autorefresh_seconds": 10,
     "last_manifest_id": "",
+    "external_tool_paths": {},
 }
 
 

@@ -88,25 +88,25 @@ def _count_shapes(ann_path: str) -> int:
         return 0
 
 
-def get_xany_exe() -> str:
+def get_xany_exe(explicit_path: str = "") -> str:
     """回傳 X-AnyLabeling 執行檔路徑。"""
-    return _external_tools.resolve_tool("x-anylabeling", _PROJECT_ROOT, _HERE)
+    return _external_tools.resolve_tool("x-anylabeling", _PROJECT_ROOT, _HERE, explicit_path)
 
 
-def get_labelme_exe() -> str:
+def get_labelme_exe(explicit_path: str = "") -> str:
     """回傳 LabelMe 執行檔路徑。"""
     env_exe = os.environ.get("LABELME_EXE", "")
     if env_exe and Path(env_exe).is_file():
         return env_exe
-    return _external_tools.resolve_tool("labelme", _PROJECT_ROOT, _HERE)
+    return _external_tools.resolve_tool("labelme", _PROJECT_ROOT, _HERE, explicit_path)
 
 
-def get_isat_exe() -> str:
+def get_isat_exe(explicit_path: str = "") -> str:
     """Return the configured ISAT launcher, falling back to isat-sam."""
     env_exe = os.environ.get("ISAT_EXE", "")
     if env_exe and Path(env_exe).exists():
         return env_exe
-    return _external_tools.resolve_tool("isat", _PROJECT_ROOT, _HERE)
+    return _external_tools.resolve_tool("isat", _PROJECT_ROOT, _HERE, explicit_path)
 
 
 # ─── 公開 API ─────────────────────────────────────────────────────────────────
@@ -225,8 +225,10 @@ def execute_logic(params: dict) -> dict:
     xany_work_dir = _cfg.get_xany_work_dir(manifest_id)
 
     # ── 7. 儲存 config（last_manifest_id 供 module_013 讀取）────────────────────
+    external_tool_paths: dict[str, str] = {}
     try:
         cfg = _cfg.load_config()
+        external_tool_paths = dict(cfg.get("external_tool_paths", {}))
         cfg["annotation_tool"] = annotation_tool
         cfg["annotation_labels"] = labels
         cfg["classification_labels"] = classification_labels
@@ -238,9 +240,9 @@ def execute_logic(params: dict) -> dict:
     except Exception as exc:
         _log.error("[012] module_012.json 儲存失敗: %s", exc)
 
-    xany_exe = get_xany_exe()
-    labelme_exe = get_labelme_exe()
-    isat_exe = get_isat_exe()
+    xany_exe = get_xany_exe(external_tool_paths.get("x-anylabeling", ""))
+    labelme_exe = get_labelme_exe(external_tool_paths.get("labelme", ""))
+    isat_exe = get_isat_exe(external_tool_paths.get("isat", ""))
     _log.info("[012] xany_exe: %s  exists=%s", xany_exe, Path(xany_exe).exists())
     _log.info("[012] labelme_exe: %s  exists=%s", labelme_exe, Path(labelme_exe).exists())
     _log.info("[012] isat_exe: %s  exists=%s", isat_exe, Path(isat_exe).exists())

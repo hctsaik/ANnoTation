@@ -123,6 +123,9 @@ def main() -> None:
             probe.healthy("workspace:launch-desktop-annotation")
             body = page.locator("body").inner_text()
             assert "external-tools" in body and "xanylabeling.exe" in body
+            assert page.get_by_role(
+                "button", name=re.compile("選擇 X-AnyLabeling 執行檔")
+            ).is_visible()
 
             page.get_by_text("在網頁直接標注", exact=False).first.click()
             state = None

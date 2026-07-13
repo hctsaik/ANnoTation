@@ -12,3 +12,6 @@ external-tools/
 
 不要只複製單一 `.exe`；其相鄰的 Python、site-packages 與相關檔案也必須存在。
 Tauri 打包時應將 `external-tools` 作為 resource/sidecar 目錄一起部署。
+
+若工具已安裝在其他位置，可在缺檔訊息下點擊「📁 選擇 … 執行檔」。App 只會把
+該電腦上的絕對路徑保存到 `module_012.json`，不會複製或上傳選取的檔案。
