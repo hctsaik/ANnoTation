@@ -28,9 +28,30 @@ try:
         delete_label, find_near_duplicates, merge_labels, rename_label, scan_labels,
     )
 except ModuleNotFoundError:  # legacy runtime during the standalone-app migration
-    from cim_annotation.label_ops import (
-        delete_label, find_near_duplicates, merge_labels, rename_label, scan_labels,
+    _label_ops_path = next(
+        (
+            candidate
+            for candidate in (
+                _HERE.parent / "domain" / "label_ops.py",
+                _HERE.parents[1] / "domain" / "label_ops.py",
+            )
+            if candidate.is_file()
+        ),
+        None,
     )
+    if _label_ops_path is None:
+        from cim_annotation.label_ops import (
+            delete_label, find_near_duplicates, merge_labels, rename_label, scan_labels,
+        )
+    else:
+        _label_ops_spec = _ilu.spec_from_file_location("_017_label_ops", _label_ops_path)
+        _label_ops = _ilu.module_from_spec(_label_ops_spec)
+        _label_ops_spec.loader.exec_module(_label_ops)
+        delete_label = _label_ops.delete_label
+        find_near_duplicates = _label_ops.find_near_duplicates
+        merge_labels = _label_ops.merge_labels
+        rename_label = _label_ops.rename_label
+        scan_labels = _label_ops.scan_labels
 
 
 def _scan_annotations(items: list[dict]) -> dict:
