@@ -340,6 +340,22 @@ def _get_items(manifest_id: str, db_items: list[dict]) -> list[dict]:
 
 # ─── X-AnyLabeling 啟動 ───────────────────────────────────────────────────────
 
+def _xany_venv_root(xany_exe: str) -> Path | None:
+    """Return the venv root for a Scripts/xanylabeling executable, if available."""
+    import shutil
+
+    exe_path = Path(xany_exe).expanduser()
+    if not exe_path.is_absolute():
+        resolved = shutil.which(xany_exe)
+        if not resolved:
+            return None
+        exe_path = Path(resolved)
+
+    if exe_path.parent.name.lower() != "scripts" or len(exe_path.parents) < 2:
+        return None
+    return exe_path.parents[1]
+
+
 def _find_venv_python_cmd(xany_exe: str) -> list[str]:
     """Return argv prefix [python, ...flags] for a WDAC-trusted Python matching the venv's ABI.
 
@@ -352,7 +368,10 @@ def _find_venv_python_cmd(xany_exe: str) -> list[str]:
     import shutil
 
     # Determine required version from pyvenv.cfg (e.g. "3.11" -> ver="3.11", short="311")
-    pyvenv_cfg = Path(xany_exe).parents[1] / "pyvenv.cfg"
+    venv_root = _xany_venv_root(xany_exe)
+    if venv_root is None:
+        return [sys.executable]
+    pyvenv_cfg = venv_root / "pyvenv.cfg"
     ver = ""
     if pyvenv_cfg.exists():
         for _line in pyvenv_cfg.read_text(encoding="utf-8").splitlines():
@@ -391,7 +410,7 @@ def _find_venv_python_cmd(xany_exe: str) -> list[str]:
                 if _cand.exists():
                     return [str(_cand)]
 
-    return [str(Path(xany_exe).parent / "python.exe")]
+    return [str(venv_root / "Scripts" / "python.exe")]
 
 
 def _launch_xany(file_path: str, labels: list[str], classes_path: str,
@@ -401,32 +420,31 @@ def _launch_xany(file_path: str, labels: list[str], classes_path: str,
 
     folder_mode=True 時 file_path 應為資料夾路徑，output 指向同一資料夾。
     """
-    classes_txt = Path(classes_path) if classes_path else Path()
-    if folder_mode:
-        out_dir = Path(file_path)
-    else:
-        out_dir = Path(file_path).parent
-
-    xany_args = [
-        "--filename", file_path,
-        "--output", str(out_dir),
-        "--work-dir", xany_work_dir,
-        "--nodata", "--autosave", "--no-auto-update-check",
-    ]
-    if classes_txt.exists():
-        xany_args += ["--labels", str(classes_txt), "--validatelabel", "exact"]
-
-    # WDAC bypass strategy:
-    #   xanylabeling.exe and some uv-created venv python.exe launchers may be blocked.
-    #   Run X-AnyLabeling through a trusted Python with the same ABI as pyvenv.cfg,
-    #   while pointing sys.path at the venv's site-packages.
-    venv_root = Path(xany_exe).parents[1]
-    venv_sp = str(venv_root / "Lib" / "site-packages")
-    launch_stmt = f"import sys; sys.path.insert(0, r'{venv_sp}'); from anylabeling.app import main; main()"
-    python_cmd = _find_venv_python_cmd(xany_exe)
-    cmd = python_cmd + ["-c", launch_stmt] + xany_args
-
     try:
+        classes_txt = Path(classes_path) if classes_path else None
+        out_dir = Path(file_path) if folder_mode else Path(file_path).parent
+        xany_args = [
+            "--filename", file_path,
+            "--output", str(out_dir),
+            "--work-dir", xany_work_dir,
+            "--nodata", "--autosave", "--no-auto-update-check",
+        ]
+        if classes_txt is not None and classes_txt.is_file():
+            xany_args += ["--labels", str(classes_txt), "--validatelabel", "exact"]
+
+        # A configured venv executable needs the WDAC-safe Python trampoline.
+        # A plain command name must be launched directly; it has no venv parents.
+        venv_root = _xany_venv_root(xany_exe)
+        if venv_root is None:
+            cmd = [xany_exe] + xany_args
+        else:
+            venv_sp = str(venv_root / "Lib" / "site-packages")
+            launch_stmt = (
+                f"import sys; sys.path.insert(0, r'{venv_sp}'); "
+                "from anylabeling.app import main; main()"
+            )
+            cmd = _find_venv_python_cmd(xany_exe) + ["-c", launch_stmt] + xany_args
+
         proc = subprocess.Popen(cmd)
         return None, proc
     except Exception as e:

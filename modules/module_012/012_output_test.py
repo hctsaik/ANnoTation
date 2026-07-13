@@ -5,6 +5,8 @@ import ast
 import json
 import os
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 
@@ -36,6 +38,25 @@ def _load_cfg_module(cim_log: Path, suffix: str = ""):
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
+
+
+def _load_xany_launch_namespace() -> dict:
+    """Load only X-AnyLabeling launch helpers, without platform config imports."""
+    source = (_HERE / "012_output.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    wanted = {"_xany_venv_root", "_find_venv_python_cmd", "_launch_xany"}
+    functions = [
+        node for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name in wanted
+    ]
+    namespace = {
+        "Path": Path,
+        "subprocess": subprocess,
+        "sys": sys,
+        "os": os,
+    }
+    exec(compile(ast.Module(body=functions, type_ignores=[]), "012_output.py", "exec"), namespace)
+    return namespace
 
 
 def test_first_pending_index_returns_global_position():
@@ -272,6 +293,49 @@ def test_launch_xany_uses_security_flags_and_never_runs_trampoline_directly(tmp_
     assert str(classes) in cmd
     assert "--validatelabel" in cmd
     assert "exact" in cmd
+
+
+def test_launch_xany_plain_command_does_not_assume_venv_parents(tmp_path, monkeypatch):
+    namespace = _load_xany_launch_namespace()
+    img = tmp_path / "frame_000001.jpg"
+    img.write_bytes(b"fake image bytes")
+    launched = []
+
+    monkeypatch.setattr(shutil, "which", lambda _name: None)
+    monkeypatch.setattr(
+        subprocess,
+        "Popen",
+        lambda cmd: launched.append(cmd) or object(),
+    )
+
+    err, proc = namespace["_launch_xany"](
+        str(img), [], "", str(tmp_path / "xany-state"), "xanylabeling"
+    )
+
+    assert err is None
+    assert proc is not None
+    assert launched[0][0] == "xanylabeling"
+    assert "--filename" in launched[0]
+
+
+def test_launch_xany_command_error_is_returned_instead_of_crashing(tmp_path, monkeypatch):
+    namespace = _load_xany_launch_namespace()
+    img = tmp_path / "frame_000001.jpg"
+    img.write_bytes(b"fake image bytes")
+
+    monkeypatch.setattr(shutil, "which", lambda _name: None)
+    monkeypatch.setattr(
+        subprocess,
+        "Popen",
+        lambda _cmd: (_ for _ in ()).throw(FileNotFoundError("xanylabeling not found")),
+    )
+
+    err, proc = namespace["_launch_xany"](
+        str(img), [], "", str(tmp_path / "xany-state"), "xanylabeling"
+    )
+
+    assert "xanylabeling not found" in err
+    assert proc is None
 
 
 # ─── file_path-based 分類持久化測試 ──────────────────────────────────────────
