@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 import shutil
-import subprocess
 from pathlib import Path
 
 
@@ -48,43 +47,6 @@ def resolve_tool(
     if command:
         return command
     return str(roots[0] / TOOL_PATHS[tool_id])
-
-
-def choose_executable(tool_id: str) -> str:
-    """Open the local Windows file picker and return a validated executable path."""
-    expected_name = TOOL_PATHS[tool_id].name.lower()
-    title = f"選擇 {expected_name}"
-    script = (
-        "[Console]::OutputEncoding=[Text.Encoding]::UTF8;"
-        "Add-Type -AssemblyName System.Windows.Forms;"
-        "$d=New-Object System.Windows.Forms.OpenFileDialog;"
-        f"$d.Title='{title}';"
-        "$d.Filter='Executable (*.exe)|*.exe';"
-        "$d.CheckFileExists=$true;"
-        "$o=New-Object System.Windows.Forms.Form;"
-        "$o.TopMost=$true;$o.ShowInTaskbar=$false;$o.Width=1;$o.Height=1;$o.Opacity=0;"
-        "$o.StartPosition='CenterScreen';$o.Show();$o.Activate();"
-        "$r=$d.ShowDialog($o);$o.Close();$o.Dispose();"
-        "if($r -eq 'OK'){[Console]::Write($d.FileName)}"
-    )
-    try:
-        result = subprocess.run(
-            ["powershell.exe", "-NoProfile", "-STA", "-Command", script],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=120,
-        )
-    except Exception:
-        return ""
-    selected = result.stdout.strip()
-    if result.returncode != 0 or not selected:
-        return ""
-    path = Path(selected)
-    if not path.is_file() or path.name.lower() != expected_name:
-        return ""
-    return str(path)
 
 
 def validate_executable_path(tool_id: str, raw_path: str) -> tuple[str, str]:

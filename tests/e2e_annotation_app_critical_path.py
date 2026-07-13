@@ -122,14 +122,23 @@ def main() -> None:
             page.get_by_role("button", name="開啟標注").first.click()
             probe.healthy("workspace:launch-desktop-annotation")
             body = page.locator("body").inner_text()
-            assert "external-tools" in body and "xanylabeling.exe" in body
-            assert page.get_by_role(
-                "button", name=re.compile("瀏覽 X-AnyLabeling")
-            ).is_visible()
-            assert page.get_by_role(
-                "textbox", name="X-AnyLabeling 執行檔完整路徑"
-            ).is_visible()
-            assert page.get_by_role("button", name="套用完整路徑").is_visible()
+            if "external-tools" in body:
+                assert "xanylabeling.exe" in body
+                picker_button = page.get_by_role(
+                    "button", name=re.compile("指定 X-AnyLabeling 位置")
+                )
+                assert picker_button.is_visible()
+                picker_button.click()
+                path_input = page.get_by_role(
+                    "textbox", name="X-AnyLabeling 執行檔完整路徑"
+                )
+                path_input.wait_for(state="visible", timeout=15_000)
+                path_input.fill(r"Z:\missing\xanylabeling.exe")
+                page.get_by_role("button", name="套用完整路徑").click()
+                page.get_by_text(re.compile("找不到檔案")).last.wait_for(timeout=15_000)
+                probe.healthy("workspace:tool-path-panel-validation")
+            else:
+                assert "找不到 X-AnyLabeling" not in body
 
             page.get_by_text("在網頁直接標注", exact=False).first.click()
             state = None
