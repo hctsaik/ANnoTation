@@ -220,6 +220,14 @@ test("runs a real local dataset through annotation, review, export, and restart"
   expect(cocoExport.annotations).toHaveLength(1);
   expect(cocoExport.annotations[0].bbox[2]).toBeGreaterThan(0);
 
+  await workflow.getByRole("button", { name: "審核" }).click();
+  await page.getByRole("button", { name: /panel-b\.png/ }).click();
+  await page.getByLabel("審核備註").fill("需補標後重送");
+  await page.getByRole("button", { name: "退回修正" }).click();
+  await expect(page.getByText("已退回這張圖片")).toBeVisible();
+  const rejectedReview = JSON.parse(await readFile(join(sourceDir, "nested folder", "panel-b.png.review.json"), "utf8")) as { status: string; comment: string };
+  expect(rejectedReview).toMatchObject({ status: "rejected", comment: "需補標後重送" });
+
   await stopLocalService();
   serviceProcess = await startLocalService();
   await page.reload();
@@ -238,11 +246,18 @@ test("runs a real local dataset through annotation, review, export, and restart"
   await expect(page.getByText("已同步")).toBeVisible();
   await workflow.getByRole("button", { name: "審核" }).click();
   await expect(page.getByLabel("審核備註")).toHaveValue("邊界確認完成");
+  await page.getByLabel("影像篩選").selectOption("rejected");
+  await expect(page.getByRole("button", { name: /panel-b\.png/ })).toContainText("已退回");
+  await expect(page.getByRole("button", { name: /panel-a\.png/ })).toHaveCount(0);
+  await page.getByRole("button", { name: /panel-b\.png/ }).click();
+  await expect(page.getByLabel("審核備註")).toHaveValue("需補標後重送");
+  await page.getByRole("button", { name: "清除", exact: true }).click();
   await workflow.getByRole("button", { name: "匯出" }).click();
   await expect(page.getByText("coco_json", { exact: true })).toBeVisible();
   expect(createHash("sha256").update(await readFile(join(sourceDir, "panel-a.png"))).digest("hex")).toBe(originalImageHash);
 
   await workflow.getByRole("button", { name: "標注工作台" }).click();
+  await page.getByRole("button", { name: /panel-a\.png/ }).click();
   const clearClassificationResponse = page.waitForResponse((response) =>
     response.request().method() === "PUT"
     && new URL(response.url()).pathname.endsWith("/classification"),
