@@ -48,5 +48,7 @@ unsupported legacy paths. The former Streamlit app and its scorecard are referen
 evidence only; they do not establish React parity.
 
 The migration is not release-complete while any required parity row is pending or
-partial. In particular, remote/iWISC source handling, a native file-picker bridge,
-and a complete end-to-end Canvas edit/save/reopen scenario still need validation.
+partial. The synthetic browser path now covers dataset creation, Canvas editing,
+classification, review, COCO export, and service restart/readback through the real
+local API. Remote/iWISC source handling, a native file-picker bridge, and packaged
+Windows architecture validation remain open.

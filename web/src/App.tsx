@@ -133,7 +133,7 @@ export default function App() {
       if (!active) return;
       setDetail(value);
       setClassification(value.item.classification ?? "");
-      setReviewComment("");
+      setReviewComment(value.item.review_comment ?? "");
       objectUrl = await loadImageUrl(manifestId, selectedId);
       if (active) setImageUrl(objectUrl);
       else URL.revokeObjectURL(objectUrl);
@@ -284,7 +284,7 @@ export default function App() {
       await api.review(manifestId, selectedId, status, reviewComment);
       setWorkspace((current) => current ? {
         ...current,
-        items: current.items.map((item) => item.item_id === selectedId ? { ...item, review_status: status } : item),
+        items: current.items.map((item) => item.item_id === selectedId ? { ...item, review_status: status, review_comment: reviewComment } : item),
       } : current);
       setNotice(status === "approved" ? "已核准這張圖片" : status === "rejected" ? "已退回這張圖片" : "已重設為待審");
     } catch (reason) {

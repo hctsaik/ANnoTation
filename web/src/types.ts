@@ -45,6 +45,7 @@ export type Item = {
   shape_count?: number;
   labels?: string[];
   review_status?: "pending" | "approved" | "rejected";
+  review_comment?: string;
   shapes?: Shape[];
 };
 

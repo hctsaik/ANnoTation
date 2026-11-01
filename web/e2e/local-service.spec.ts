@@ -19,6 +19,7 @@ const PNG_FIXTURE = Buffer.from(
 let serviceProcess: ChildProcess | undefined;
 let appDataDir = "";
 let sourceDir = "";
+let exportDir = "";
 let servicePort = 0;
 let temporaryRoot = "";
 let serviceLogs = "";
@@ -88,11 +89,12 @@ async function stopLocalService(): Promise<void> {
   if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
 }
 
-test("uses a real local folder and Python service, then reads saved annotations after restart", async ({ page }) => {
+test("runs a real local dataset through annotation, review, export, and restart", async ({ page }) => {
   test.setTimeout(60_000);
   temporaryRoot = await mkdtemp(join(tmpdir(), "annotation-local-service-e2e-"));
   appDataDir = join(temporaryRoot, "app data");
   sourceDir = join(temporaryRoot, "資料集 with spaces");
+  exportDir = join(temporaryRoot, "exports with spaces");
   await mkdir(join(sourceDir, "nested folder"), { recursive: true });
   await writeFile(join(sourceDir, "panel-a.png"), PNG_FIXTURE);
   await writeFile(join(sourceDir, "nested folder", "panel-b.png"), PNG_FIXTURE);
@@ -111,6 +113,14 @@ test("uses a real local folder and Python service, then reads saved annotations 
   await expect(page.getByRole("heading", { name: "標注工作台" })).toBeVisible();
   await expect(page.getByRole("button", { name: /panel-a\.png/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /panel-b\.png/ })).toBeVisible();
+  const workflow = page.getByRole("navigation", { name: "工作流程" });
+  await workflow.getByRole("button", { name: "資料集" }).click();
+  await page.getByRole("button", { name: "標籤管理" }).click();
+  await page.getByLabel("框選標籤").fill("scratch");
+  await page.getByLabel("整張圖片分類").fill("OK\nNG");
+  await page.getByRole("button", { name: /保存工作區設定/ }).click();
+  await expect(page.getByText("工作區設定已保存")).toBeVisible();
+  await workflow.getByRole("button", { name: "標注工作台" }).click();
   await page.getByRole("button", { name: /panel-a\.png/ }).click();
   const canvas = page.getByLabel("圖片與標注框");
   await expect(canvas).toBeVisible();
@@ -125,6 +135,8 @@ test("uses a real local folder and Python service, then reads saved annotations 
   const sidecarPath = join(sourceDir, "panel-a.json");
   await page.getByRole("button", { name: /保存標注/ }).click();
   await expect(page.getByText("已同步")).toBeVisible();
+  await page.getByLabel("分類結果").selectOption("OK");
+  await expect(page.getByRole("button", { name: /panel-a\.png/ })).toContainText("OK");
   const initialAnnotation = JSON.parse(await readFile(sidecarPath, "utf8")) as { shapes: Array<{ points: number[][] }> };
   const initialPoints = initialAnnotation.shapes[0].points;
 
@@ -132,7 +144,7 @@ test("uses a real local folder and Python service, then reads saved annotations 
   await selectTool.click();
   const canvasMetrics = await canvas.evaluate((element: HTMLCanvasElement) => {
     const rect = element.getBoundingClientRect();
-    return { x: rect.x, y: rect.y, width: rect.width, height: rect.height, bitmapWidth: element.width, bitmapHeight: element.height };
+    return { width: rect.width, height: rect.height };
   });
   const moveX = canvasMetrics.width * 0.04;
   const moveY = canvasMetrics.height * 0.04;
@@ -184,6 +196,27 @@ test("uses a real local folder and Python service, then reads saved annotations 
   expect(savedAnnotation.shapes[0].points[1][1]).toBeGreaterThan(initialPoints[1][1]);
   expect(createHash("sha256").update(await readFile(join(sourceDir, "panel-a.png"))).digest("hex")).toBe(originalImageHash);
 
+  await workflow.getByRole("button", { name: "審核" }).click();
+  await page.getByLabel("審核備註").fill("邊界確認完成");
+  await page.getByRole("button", { name: /核准標注/ }).click();
+  await expect(page.getByText("已核准這張圖片")).toBeVisible();
+  await page.getByLabel("我已完成必要抽查與異常處理").check();
+  const savedReview = JSON.parse(await readFile(join(sourceDir, "panel-a.png.review.json"), "utf8")) as { status: string; comment: string };
+  expect(savedReview).toMatchObject({ status: "approved", comment: "邊界確認完成" });
+
+  await workflow.getByRole("button", { name: "匯出" }).click();
+  await page.getByLabel("允許部分匯出").check();
+  await page.getByLabel("資料夾路徑").fill(exportDir);
+  await page.getByRole("button", { name: /檢查並開始匯出/ }).click();
+  await expect(page.getByRole("heading", { name: "匯出完成" })).toBeVisible();
+  const cocoExport = JSON.parse(await readFile(join(exportDir, "coco_json", "all.json"), "utf8")) as {
+    images: Array<{ file_name: string }>;
+    annotations: Array<{ bbox: number[] }>;
+  };
+  expect(cocoExport.images.map((image) => image.file_name).sort()).toEqual(["panel-a.png", "panel-b.png"]);
+  expect(cocoExport.annotations).toHaveLength(1);
+  expect(cocoExport.annotations[0].bbox[2]).toBeGreaterThan(0);
+
   await stopLocalService();
   serviceProcess = await startLocalService();
   await page.reload();
@@ -191,7 +224,15 @@ test("uses a real local folder and Python service, then reads saved annotations 
   await expect(page.getByRole("button", { name: /panel-a\.png/ })).toBeVisible();
   await page.getByRole("button", { name: /panel-a\.png/ }).click();
   await expect(page.getByLabel("第 1 個框選類別")).toBeVisible();
+  await expect(page.getByLabel("分類結果")).toHaveValue("OK");
+  const restoredPanel = page.getByRole("button", { name: /panel-a\.png/ });
+  await expect(restoredPanel).toContainText("OK");
+  await expect(restoredPanel).toContainText("已核准");
   await expect(page.getByText("已同步")).toBeVisible();
+  await workflow.getByRole("button", { name: "審核" }).click();
+  await expect(page.getByLabel("審核備註")).toHaveValue("邊界確認完成");
+  await workflow.getByRole("button", { name: "匯出" }).click();
+  await expect(page.getByText("coco_json", { exact: true })).toBeVisible();
   expect(createHash("sha256").update(await readFile(join(sourceDir, "panel-a.png"))).digest("hex")).toBe(originalImageHash);
 });
 

@@ -104,8 +104,10 @@ def test_classification_and_review_round_trip(service_and_dataset):
     detail = service.item_detail(created["manifest_id"], item_id)
     assert detail["item"]["classification"] == "NG"
     assert detail["item"]["review_status"] == "approved"
+    assert detail["item"]["review_comment"] == "checked"
     review_items = service.items(created["manifest_id"], view="review")
     assert review_items[0]["review_status"] == "approved"
+    assert review_items[0]["review_comment"] == "checked"
     assert str(service.data_dir) not in json.dumps(review_items)
 
 

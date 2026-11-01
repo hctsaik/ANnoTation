@@ -210,6 +210,7 @@ class AnnotationService:
         items = []
         for item in result.get("items", []):
             ann = self._read_annotation(item.get("ann_path") or "")
+            review = self._review_data(str(item.get("file_path") or ""))
             items.append(
                 self._public_item(
                     item,
@@ -219,7 +220,7 @@ class AnnotationService:
                         "has_bbox": bool(item.get("shape_count") or 0),
                         "shape_count": int(item.get("shape_count") or 0),
                         "classification": classifications.get(item.get("item_id", ""), ""),
-                        "review_status": self._review_status(str(item.get("file_path") or "")),
+                        **review,
                         "shapes": ann.get("shapes", []),
                         "max_conf": self._max_confidence(ann.get("shapes", [])),
                     },
@@ -270,6 +271,7 @@ class AnnotationService:
         for row in rows:
             ann = self._read_annotation(row.get("ann_path") or "")
             shapes = ann.get("shapes", [])
+            review = self._review_data(str(row.get("file_path") or ""))
             public.append(
                 self._public_item(
                     row,
@@ -287,8 +289,8 @@ class AnnotationService:
                         "labels": row.get("labels") or list(dict.fromkeys(
                             str(shape.get("label") or "") for shape in shapes if shape.get("label")
                         )),
-                        "review_status": row.get("review_status")
-                        or self._review_status(str(row.get("file_path") or "")),
+                        "review_status": row.get("review_status") or review["review_status"],
+                        "review_comment": review["review_comment"],
                         "max_conf": self._max_confidence(shapes),
                     },
                 )
@@ -312,7 +314,7 @@ class AnnotationService:
                     "has_classification": bool(classifications.get(item_id, "")),
                     "shape_count": len(annotation.get("shapes", [])),
                     "classification": classifications.get(item_id, ""),
-                    "review_status": self._review_status(str(path)),
+                    **self._review_data(str(path)),
                     "labels": list(dict.fromkeys(
                         str(shape.get("label") or "") for shape in annotation.get("shapes", []) if shape.get("label")
                     )),
@@ -358,15 +360,25 @@ class AnnotationService:
         return max(scores, default=0.0)
 
     @staticmethod
-    def _review_status(file_path: str) -> str:
+    def _review_data(file_path: str) -> dict[str, str]:
         if not file_path:
-            return "pending"
+            return {"review_status": "pending", "review_comment": ""}
         review_path = Path(file_path).parent / (Path(file_path).name + ".review.json")
         try:
-            status = json.loads(review_path.read_text(encoding="utf-8")).get("status", "pending")
+            value = json.loads(review_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError, AttributeError):
-            return "pending"
-        return status if status in {"pending", "approved", "rejected"} else "pending"
+            return {"review_status": "pending", "review_comment": ""}
+        if not isinstance(value, dict):
+            return {"review_status": "pending", "review_comment": ""}
+        status = value.get("status", "pending")
+        return {
+            "review_status": status if status in {"pending", "approved", "rejected"} else "pending",
+            "review_comment": str(value.get("comment") or "")[:4000],
+        }
+
+    @classmethod
+    def _review_status(cls, file_path: str) -> str:
+        return cls._review_data(file_path)["review_status"]
 
     def save_annotation(self, manifest_id: str, item_id: str, value: dict[str, Any]) -> dict[str, Any]:
         manifest, item = self._raw_item(manifest_id, item_id)
