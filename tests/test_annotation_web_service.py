@@ -116,6 +116,64 @@ def test_classification_and_review_round_trip(service_and_dataset):
     assert str(service.data_dir) not in json.dumps(review_items)
 
 
+def test_react_tool_launch_api_passes_granted_item_to_registered_adapter(
+    service_and_dataset, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+):
+    service, source, created = service_and_dataset
+    item_id = manifest_db.get_manifest_items(service.db_path, created["manifest_id"])[0]["item_id"]
+    executable = tmp_path / "labelme.exe"
+    executable.write_bytes(b"fixture executable")
+    calls: list[tuple[str, dict]] = []
+
+    class Adapter:
+        def launch_file(self, file_path: str, options: dict) -> None:
+            calls.append((file_path, options))
+            return None
+
+    class Registry:
+        def get(self, tool_id: str):
+            assert tool_id == "labelme"
+            return None, Adapter()
+
+    monkeypatch.setattr("domain.tools.registry.get_tool_registry", lambda: Registry())
+    static_dir = tmp_path / "dist"
+    static_dir.mkdir()
+    origin = "http://127.0.0.1:5173"
+    server = ThreadingHTTPServer(
+        ("127.0.0.1", 0),
+        make_handler(service, "tool-session", static_dir, {origin}),
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=5)
+    try:
+        connection.request(
+            "POST",
+            f"/api/manifests/{created['manifest_id']}/items/{item_id}/launch",
+            body=json.dumps({"tool": "labelme", "executable_override": str(executable)}),
+            headers={
+                "Origin": origin,
+                "X-Annotation-Token": "tool-session",
+                "Content-Type": "application/json",
+            },
+        )
+        response = connection.getresponse()
+        body = response.read()
+        result = json.loads(body)
+
+        assert response.status == 200
+        assert result == {"launched": True, "tool": "labelme", "item_id": item_id}
+        assert str(source) not in body.decode("utf-8")
+        assert calls == [
+            (str((source / "panel-a.png").resolve()), {"executable_override": str(executable.resolve())})
+        ]
+    finally:
+        connection.close()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
 def test_yolo_prelabel_skips_existing_sidecar_without_loading_model(service_and_dataset, tmp_path, monkeypatch):
     service, source, created = service_and_dataset
     image_path = source / "panel-a.png"

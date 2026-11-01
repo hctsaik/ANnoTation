@@ -102,3 +102,23 @@ def test_list_labeling_tools_via_service(tmp_path) -> None:
     tools = svc.list_labeling_tools()
     assert any(t["id"] == "x-anylabeling" for t in tools)
     assert any(t["id"] == "isat" for t in tools)
+
+
+def test_labelme_file_launch_targets_image_and_adjacent_sidecar(tmp_path, monkeypatch):
+    from domain.tools import builtins
+
+    image = tmp_path / "panel 01.png"
+    image.write_bytes(b"fixture")
+    executable = tmp_path / "labelme.exe"
+    executable.write_bytes(b"fixture executable")
+    launched = []
+    monkeypatch.setattr(builtins.subprocess, "Popen", lambda command, **kwargs: launched.append((command, kwargs)))
+    reset_tool_registry()
+    _descriptor, adapter = get_tool_registry().get("labelme")
+
+    assert adapter.launch_file(str(image), {"executable_override": str(executable)}) is None
+
+    assert len(launched) == 1
+    command, options = launched[0]
+    assert command == [str(executable), str(image), "--output", str(image.with_suffix(".json"))]
+    assert options["close_fds"] is True

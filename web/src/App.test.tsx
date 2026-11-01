@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
     review: vi.fn(),
     saveClassification: vi.fn(),
     prelabel: vi.fn(),
+    launchTool: vi.fn(),
     export: vi.fn(),
     labels: vi.fn(),
     labelAction: vi.fn(),
@@ -60,6 +61,7 @@ describe("ANnoTation workflow shell", () => {
     mocks.api.review.mockResolvedValue({ status: "approved" });
     mocks.api.saveClassification.mockResolvedValue({ classification: "OK" });
     mocks.api.prelabel.mockResolvedValue({ ok: 1, skipped: 0, errors: 0, detected: 2 });
+    mocks.api.launchTool.mockResolvedValue({ launched: true, tool: "labelme", item_id: "img-a" });
     mocks.api.export.mockResolvedValue({ mode: "done", total_items: 2, annotated_items: 1 });
     mocks.api.labels.mockResolvedValue({
       manifest_id: "demo",
@@ -177,6 +179,22 @@ describe("ANnoTation workflow shell", () => {
     expect(await screen.findByText(/前 1 批已完成（500 張、42 個框）/)).toBeInTheDocument();
     expect(screen.getByText(/模型服務中斷/)).toBeInTheDocument();
     expect(mocks.api.workspace).toHaveBeenCalledTimes(2);
+  });
+
+  it("launches the selected external annotation tool for the current image", async () => {
+    render(<App />);
+    await screen.findByRole("heading", { name: "標注工作台" });
+    fireEvent.change(screen.getByLabelText("外部標注工具"), { target: { value: "labelme" } });
+    fireEvent.change(screen.getByLabelText("工具執行檔（選填）"), {
+      target: { value: "D:\\Tools\\labelme.exe" },
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: /外部工具/ }));
+
+    await waitFor(() => expect(mocks.api.launchTool).toHaveBeenCalledWith(
+      "demo", "img-a", "labelme", "D:\\Tools\\labelme.exe",
+    ));
+    expect(await screen.findByText("已要求本機標注工具開啟目前圖片")).toBeInTheDocument();
   });
 
   it("loads and creates a dataset from a remote Service", async () => {
