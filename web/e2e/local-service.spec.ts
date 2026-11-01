@@ -209,16 +209,30 @@ test("runs a real local dataset through annotation, review, export, and restart"
 
   await workflow.getByRole("button", { name: "匯出" }).click();
   await page.getByLabel("允許部分匯出").check();
+  for (const format of ["YOLO txt", "Pascal VOC", "ImageFolder", "CSV"]) {
+    await page.getByText(format, { exact: true }).click();
+  }
+  await page.getByText("啟用 Train / Val / Test 分割", { exact: true }).click();
+  const splitInputs = page.locator(".split-fields input[type=number]");
+  await splitInputs.nth(0).fill("100");
+  await splitInputs.nth(1).fill("0");
+  await splitInputs.nth(2).fill("0");
   await page.getByLabel("資料夾路徑").fill(exportDir);
   await page.getByRole("button", { name: /檢查並開始匯出/ }).click();
   await expect(page.getByRole("heading", { name: "匯出完成" })).toBeVisible();
-  const cocoExport = JSON.parse(await readFile(join(exportDir, "coco_json", "all.json"), "utf8")) as {
+  const cocoExport = JSON.parse(await readFile(join(exportDir, "coco_json", "train.json"), "utf8")) as {
     images: Array<{ file_name: string }>;
     annotations: Array<{ bbox: number[] }>;
   };
   expect(cocoExport.images.map((image) => image.file_name).sort()).toEqual(["panel-a.png", "panel-b.png"]);
   expect(cocoExport.annotations).toHaveLength(1);
   expect(cocoExport.annotations[0].bbox[2]).toBeGreaterThan(0);
+  expect(await readFile(join(exportDir, "yolo_txt", "labels", "train", "panel-a.txt"), "utf8")).toMatch(/^0\s/);
+  expect(await readFile(join(exportDir, "pascal_voc", "Annotations", "panel-a.xml"), "utf8")).toContain("<name>scratch</name>");
+  expect(await readFile(join(exportDir, "pascal_voc", "ImageSets", "Main", "train.txt"), "utf8")).toContain("panel-a");
+  expect(await readFile(join(exportDir, "imagefolder", "train", "OK", "panel-a.png"))).toBeTruthy();
+  const csvExport = await readFile(join(exportDir, "csv", "annotations.csv"), "utf8");
+  expect(csvExport).toContain(",train,OK,scratch,rectangle,");
 
   await workflow.getByRole("button", { name: "審核" }).click();
   await page.getByRole("button", { name: /panel-b\.png/ }).click();
@@ -253,7 +267,9 @@ test("runs a real local dataset through annotation, review, export, and restart"
   await expect(page.getByLabel("審核備註")).toHaveValue("需補標後重送");
   await page.getByRole("button", { name: "清除", exact: true }).click();
   await workflow.getByRole("button", { name: "匯出" }).click();
-  await expect(page.getByText("coco_json", { exact: true })).toBeVisible();
+  for (const format of ["coco_json", "yolo_txt", "pascal_voc", "imagefolder", "csv"]) {
+    await expect(page.getByText(format, { exact: true })).toBeVisible();
+  }
   expect(createHash("sha256").update(await readFile(join(sourceDir, "panel-a.png"))).digest("hex")).toBe(originalImageHash);
 
   await workflow.getByRole("button", { name: "標注工作台" }).click();
