@@ -868,20 +868,22 @@ class AnnotationService:
         selected = [item for item in items if item.get("item_id") in selected_ids]
         if len(selected) > 500:
             raise ServiceError(413, "Run local pre-labeling on at most 500 images at a time")
-        try:
-            from ultralytics import YOLO
-
-            model = YOLO(str(model_path))
-        except Exception as exc:
-            raise ServiceError(503, "Could not load the selected local YOLO model") from exc
         counts = {"ok": 0, "skipped": 0, "errors": 0, "detected": 0}
         overwrite = bool(params.get("overwrite", False))
+        model = None
         for item in selected:
             path = Path(item["file_path"])
             annotation_path = path.with_suffix(".json")
             if annotation_path.exists() and not overwrite:
                 counts["skipped"] += 1
                 continue
+            if model is None:
+                try:
+                    from ultralytics import YOLO
+
+                    model = YOLO(str(model_path))
+                except Exception as exc:
+                    raise ServiceError(503, "Could not load the selected local YOLO model") from exc
             try:
                 prediction = model(str(path), conf=confidence, verbose=False)[0]
                 height, width = (int(prediction.orig_shape[0]), int(prediction.orig_shape[1]))

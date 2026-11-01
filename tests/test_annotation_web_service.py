@@ -3,10 +3,12 @@ from __future__ import annotations
 import io
 import http.client
 import json
+import sys
 import threading
 import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from types import SimpleNamespace
 from urllib.parse import urlencode
 
 import pytest
@@ -112,6 +114,110 @@ def test_classification_and_review_round_trip(service_and_dataset):
     assert review_items[0]["review_status"] == "approved"
     assert review_items[0]["review_comment"] == "checked"
     assert str(service.data_dir) not in json.dumps(review_items)
+
+
+def test_yolo_prelabel_skips_existing_sidecar_without_loading_model(service_and_dataset, tmp_path, monkeypatch):
+    service, source, created = service_and_dataset
+    image_path = source / "panel-a.png"
+    sidecar = image_path.with_suffix(".json")
+    original = '{"shapes":[{"label":"human","shape_type":"rectangle"}]}\n'
+    sidecar.write_text(original, encoding="utf-8")
+    model_path = tmp_path / "local-model.pt"
+    model_path.write_bytes(b"test model placeholder")
+
+    def unexpected_model_load(_path):
+        pytest.fail("all existing annotations are skipped, so the YOLO model must not load")
+
+    monkeypatch.setitem(sys.modules, "ultralytics", SimpleNamespace(YOLO=unexpected_model_load))
+
+    result = service.run_yolo(created["manifest_id"], {"model_path": str(model_path)})
+
+    assert result == {"ok": 0, "skipped": 1, "errors": 0, "detected": 0}
+    assert sidecar.read_text(encoding="utf-8") == original
+
+
+def test_yolo_prelabel_overwrite_uses_confidence_and_writes_boxes(service_and_dataset, tmp_path, monkeypatch):
+    service, source, created = service_and_dataset
+    image_path = source / "panel-a.png"
+    sidecar = image_path.with_suffix(".json")
+    sidecar.write_text('{"flags":{"keep":true},"shapes":[{"label":"old"}]}', encoding="utf-8")
+    model_path = tmp_path / "local-model.pt"
+    model_path.write_bytes(b"test model placeholder")
+    observed = {}
+
+    class FakeModel:
+        names = {0: "scratch"}
+
+        def __call__(self, path, *, conf, verbose):
+            observed.update(path=path, confidence=conf, verbose=verbose)
+            box = SimpleNamespace(xyxy=[[2, 3, 14, 17]], cls=[0], conf=[0.87654])
+            return [SimpleNamespace(orig_shape=(24, 32), boxes=[box])]
+
+    def load_model(path):
+        observed["model_path"] = path
+        return FakeModel()
+
+    monkeypatch.setitem(sys.modules, "ultralytics", SimpleNamespace(YOLO=load_model))
+    before = image_path.read_bytes()
+
+    result = service.run_yolo(created["manifest_id"], {
+        "model_path": str(model_path), "confidence": 0.42, "overwrite": True,
+    })
+
+    assert result == {"ok": 1, "skipped": 0, "errors": 0, "detected": 1}
+    assert observed == {
+        "model_path": str(model_path.resolve()),
+        "path": str(image_path),
+        "confidence": 0.42,
+        "verbose": False,
+    }
+    saved = json.loads(sidecar.read_text(encoding="utf-8"))
+    assert saved["flags"] == {"keep": True}
+    assert saved["imageWidth"] == 32 and saved["imageHeight"] == 24
+    assert saved["shapes"] == [{
+        "label": "scratch", "score": 0.8765, "points": [[2.0, 3.0], [14.0, 17.0]],
+        "group_id": None, "description": "", "difficult": False,
+        "shape_type": "rectangle", "flags": {},
+    }]
+    assert image_path.read_bytes() == before
+
+
+def test_yolo_prelabel_reports_malformed_model(service_and_dataset, tmp_path, monkeypatch):
+    service, _source, created = service_and_dataset
+    model_path = tmp_path / "malformed-model.pt"
+    model_path.write_bytes(b"not a model")
+
+    def fail_to_load(_path):
+        raise ValueError("invalid checkpoint")
+
+    monkeypatch.setitem(sys.modules, "ultralytics", SimpleNamespace(YOLO=fail_to_load))
+
+    with pytest.raises(ServiceError, match="Could not load the selected local YOLO model") as error:
+        service.run_yolo(created["manifest_id"], {"model_path": str(model_path)})
+
+    assert error.value.status == 503
+
+
+def test_yolo_prelabel_persists_empty_prediction(service_and_dataset, tmp_path, monkeypatch):
+    service, source, created = service_and_dataset
+    model_path = tmp_path / "local-model.pt"
+    model_path.write_bytes(b"test model placeholder")
+
+    class EmptyModel:
+        names = {}
+
+        def __call__(self, _path, *, conf, verbose):
+            assert conf == 0.25 and verbose is False
+            return [SimpleNamespace(orig_shape=(24, 32), boxes=[])]
+
+    monkeypatch.setitem(sys.modules, "ultralytics", SimpleNamespace(YOLO=lambda _path: EmptyModel()))
+
+    result = service.run_yolo(created["manifest_id"], {"model_path": str(model_path)})
+
+    assert result == {"ok": 1, "skipped": 0, "errors": 0, "detected": 0}
+    saved = json.loads((source / "panel-a.json").read_text(encoding="utf-8"))
+    assert saved["shapes"] == []
+    assert saved["imageWidth"] == 32 and saved["imageHeight"] == 24
 
 
 def test_dataset_grant_rejects_files_outside_source_folder(tmp_path: Path):
