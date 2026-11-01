@@ -236,6 +236,27 @@ test("runs a real local dataset through annotation, review, export, and restart"
   await workflow.getByRole("button", { name: "匯出" }).click();
   await expect(page.getByText("coco_json", { exact: true })).toBeVisible();
   expect(createHash("sha256").update(await readFile(join(sourceDir, "panel-a.png"))).digest("hex")).toBe(originalImageHash);
+
+  await workflow.getByRole("button", { name: "標注工作台" }).click();
+  const clearClassificationResponse = page.waitForResponse((response) =>
+    response.request().method() === "PUT"
+    && new URL(response.url()).pathname.endsWith("/classification"),
+  );
+  await page.getByLabel("分類結果").selectOption("");
+  expect((await clearClassificationResponse).status()).toBe(200);
+  await expect(page.getByLabel("分類結果")).toHaveValue("");
+  await expect(page.getByRole("button", { name: /panel-a\.png/ })).not.toContainText("OK");
+  await page.getByRole("button", { name: /panel-b\.png/ }).click();
+  await page.getByRole("button", { name: /panel-a\.png/ }).click();
+  await expect(page.getByLabel("分類結果")).toHaveValue("");
+
+  await stopLocalService();
+  serviceProcess = await startLocalService();
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "標注工作台" })).toBeVisible();
+  await page.getByRole("button", { name: /panel-a\.png/ }).click();
+  await expect(page.getByLabel("分類結果")).toHaveValue("");
+  await expect(page.getByRole("button", { name: /panel-a\.png/ })).not.toContainText("OK");
 });
 
 test("previews label merge impact before the real service rewrites sidecars", async ({ page }) => {
