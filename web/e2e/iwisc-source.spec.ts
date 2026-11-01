@@ -157,6 +157,22 @@ test("registers an iWISC service, lists tasks, claims one, and opens its local i
 
   await expect(page.getByRole("heading", { name: "標注工作台" })).toBeVisible();
   await expect(page.getByRole("button", { name: /panel-a\.png/ })).toBeVisible();
+  const canvas = page.getByLabel("圖片與標注框");
+  await expect(canvas).toBeVisible();
+  const bounds = await canvas.boundingBox();
+  if (!bounds) throw new Error("The iWISC task image canvas is not visible");
+  await page.mouse.move(bounds.x + bounds.width * 0.2, bounds.y + bounds.height * 0.2);
+  await page.mouse.down();
+  await page.mouse.move(bounds.x + bounds.width * 0.75, bounds.y + bounds.height * 0.75);
+  await page.mouse.up();
+  await page.getByRole("button", { name: /保存標注/ }).click();
+  await expect(page.getByText("已同步")).toBeVisible();
+
+  await page.getByLabel("完成任務作業員工號").fill("worker-e2e");
+  await page.getByRole("button", { name: /保存並完成任務/ }).click();
+  await expect(page.getByRole("region", { name: "iWISC 任務狀態" }).getByText(/外部結果回傳尚未支援/)).toBeVisible();
+  await expect(page.getByText("此外部任務已完成，標注內容為唯讀。")).toBeVisible();
+  await expect(page.getByRole("button", { name: /保存標注/ })).toBeDisabled();
   expect(externalRequests).toContain("GET /getAntList");
   expect(externalRequests).toContain("POST /getAntTaskDetail");
   expect(externalRequests).toContain("PATCH /tasks/ant-e2e-01/claim");

@@ -60,6 +60,7 @@ export default function App() {
   const [newIwiscUrl, setNewIwiscUrl] = useState("");
   const [newIwiscFormat, setNewIwiscFormat] = useState("coco");
   const [newIwiscToken, setNewIwiscToken] = useState("");
+  const [iwiscWorkerId, setIwiscWorkerId] = useState("");
   const [selectedId, setSelectedId] = useState("");
   const [canvasRevision, setCanvasRevision] = useState(0);
   const [detail, setDetail] = useState<{ item: Item; annotation: Annotation } | null>(null);
@@ -198,6 +199,8 @@ export default function App() {
   const pageCount = Math.max(1, Math.ceil(filteredItems.length / pageSize));
   const visibleItems = filteredItems.slice(page * pageSize, (page + 1) * pageSize);
   const currentManifest = manifests.find((item) => item.manifest_id === manifestId);
+  const linkedIwiscTask = workspace?.iwisc_task ?? null;
+  const linkedTaskCompleted = linkedIwiscTask?.ant_active === 2;
   const currentItem = detail?.item ?? allItems.find((item) => item.item_id === selectedId) ?? null;
   const imageCount = workspace?.total ?? currentManifest?.item_count ?? 0;
   const approvedCount = allItems.filter((item) => item.review_status === "approved").length;
@@ -227,13 +230,40 @@ export default function App() {
   }
 
   async function saveCurrentAnnotation() {
-    if (!manifestId || !selectedId || !detail || !dirty) return;
+    if (!manifestId || !selectedId || !detail || !dirty || linkedTaskCompleted) return;
     setBusy(true);
     try {
       await api.saveAnnotation(manifestId, selectedId, detail.annotation);
       setDirty(false);
       setNotice("標注已保存");
       await refreshWorkspace();
+    } catch (reason) {
+      setError(shortError(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function completeLinkedIwiscTask(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!manifestId || !linkedIwiscTask || linkedTaskCompleted) return;
+    setBusy(true);
+    setError("");
+    try {
+      if (dirty && selectedId && detail) {
+        await api.saveAnnotation(manifestId, selectedId, detail.annotation);
+        setDirty(false);
+      }
+      const result = await api.completeIwiscTask(manifestId, iwiscWorkerId);
+      const refreshed = await api.workspace(manifestId, {});
+      setWorkspace(refreshed);
+      if (result.delivery.status === "unsupported") {
+        setNotice("任務已在本機標記完成；外部結果回傳尚未支援，請用匯出功能保留結果副本。");
+      } else if (result.delivery.error) {
+        setNotice("任務已在本機標記完成，但外部結果回傳失敗；請聯繫管理員。");
+      } else {
+        setNotice("iWISC 任務已完成，外部系統已回應成功。");
+      }
     } catch (reason) {
       setError(shortError(reason));
     } finally {
@@ -634,6 +664,13 @@ export default function App() {
             <select aria-label="目前資料集" value={manifestId} onChange={(event) => setManifestId(event.target.value)}>{manifests.map((item) => <option key={item.manifest_id} value={item.manifest_id}>{item.name} · {item.item_count} 張</option>)}</select>
             <button className="quiet-button" onClick={() => void refreshWorkspace()} disabled={!manifestId || busy || dirty} type="button">↻ 重新掃描</button>
           </div></div>
+          {linkedIwiscTask && <section className={`linked-iwisc-task ${linkedTaskCompleted ? "completed" : ""}`} aria-label="iWISC 任務狀態">
+            <div className="linked-iwisc-summary"><span className="task-status-icon">{linkedTaskCompleted ? "✓" : "↗"}</span><div><strong>iWISC 任務 {linkedIwiscTask.ant_id}</strong><small>{linkedTaskCompleted ? `已在本機完成 · 回傳狀態：${linkedIwiscTask.delivery_status || "unknown"}` : "標注內容會保存到此任務紀錄"}</small></div></div>
+            {linkedTaskCompleted ? <p className="linked-iwisc-message">{linkedIwiscTask.delivery_status === "unsupported" ? "外部結果回傳尚未支援；請使用匯出功能保留結果副本。" : linkedIwiscTask.delivery_status === "error" ? "本機任務已完成，但外部結果回傳失敗。" : "此任務已完成，不能再修改標注。"}</p> : <form className="linked-iwisc-complete" onSubmit={completeLinkedIwiscTask}>
+              <label>作業員工號<input aria-label="完成任務作業員工號" value={iwiscWorkerId} onChange={(event) => setIwiscWorkerId(event.target.value)} placeholder="user001" required /></label>
+              <button className="primary-button" type="submit" disabled={busy || !iwiscWorkerId.trim()}>保存並完成任務 <span>→</span></button>
+            </form>}
+          </section>}
           {!manifestId ? <div className="empty-state"><span>▦</span><h2>先建立或選擇資料集</h2><p>到「資料集」加入本機影像資料夾。</p><button className="primary-button" onClick={() => setStage("data")} type="button">前往資料集 <span>→</span></button></div> : <>
             <div className="stats-strip"><div><span className="metric-icon blue">▧</span><div><small>總圖片</small><strong>{imageCount.toLocaleString()}</strong></div></div><div><span className="metric-icon mint">✓</span><div><small>已標注</small><strong>{(imageCount - (workspace?.pending ?? imageCount)).toLocaleString()}</strong></div></div><div><span className="metric-icon amber">◷</span><div><small>待標注</small><strong>{(workspace?.pending ?? imageCount).toLocaleString()}</strong></div></div><div><span className="metric-icon violet">◇</span><div><small>{stage === "review" ? "待審核" : "已分類"}</small><strong>{stage === "review" ? pendingReviewCount.toLocaleString() : allItems.filter((item) => item.has_classification).length.toLocaleString()}</strong></div></div><div className="completion-card"><span>完成進度</span><strong>{imageCount ? Math.round(((imageCount - (workspace?.pending ?? imageCount)) / imageCount) * 100) : 0}%</strong><div className="progress-track"><i style={{ width: `${imageCount ? ((imageCount - (workspace?.pending ?? imageCount)) / imageCount) * 100 : 0}%` }} /></div></div></div>
 
@@ -654,8 +691,8 @@ export default function App() {
 
               <section className="editor-column">
                 {currentItem && detail ? <>
-                  <div className="image-header"><div><div className="crumbs"><span>影像</span><i>/</i><strong>{currentItem.name}</strong></div><div className="image-meta"><span>{currentItem.width ?? "—"} × {currentItem.height ?? "—"} px</span><span>·</span><span>{detail.annotation.shapes.length} 個圖形</span><span>·</span><span className={`save-state ${dirty ? "unsaved" : ""}`}>{dirty ? "尚未儲存" : "已同步"}</span></div></div><div className="image-header-actions"><button className="quiet-button" onClick={() => void launchTool()} disabled={busy} type="button">↗ 外部工具</button><button className="primary-button compact-button" onClick={() => void saveCurrentAnnotation()} disabled={!dirty || busy} type="button">保存標注 <span>↵</span></button></div></div>
-                  <AnnotationCanvas key={`${selectedId}-${canvasRevision}`} itemKey={selectedId} imageUrl={imageUrl} annotation={detail.annotation} labels={workspace?.labels ?? []} onChange={(annotation) => { setDetail((current) => current ? { ...current, annotation } : current); setDirty(true); }} />
+                  <div className="image-header"><div><div className="crumbs"><span>影像</span><i>/</i><strong>{currentItem.name}</strong></div><div className="image-meta"><span>{currentItem.width ?? "—"} × {currentItem.height ?? "—"} px</span><span>·</span><span>{detail.annotation.shapes.length} 個圖形</span><span>·</span><span className={`save-state ${dirty ? "unsaved" : ""}`}>{dirty ? "尚未儲存" : "已同步"}</span></div></div><div className="image-header-actions"><button className="quiet-button" onClick={() => void launchTool()} disabled={busy || linkedTaskCompleted} type="button">↗ 外部工具</button><button className="primary-button compact-button" onClick={() => void saveCurrentAnnotation()} disabled={!dirty || busy || linkedTaskCompleted} type="button">保存標注 <span>↵</span></button></div></div>
+                  <AnnotationCanvas key={`${selectedId}-${canvasRevision}`} itemKey={selectedId} imageUrl={imageUrl} annotation={detail.annotation} labels={workspace?.labels ?? []} readOnly={linkedTaskCompleted} onChange={(annotation) => { setDetail((current) => current ? { ...current, annotation } : current); setDirty(true); }} />
                   <div className="image-footer"><button className="quiet-button" disabled={selectedItemIndex <= 0} onClick={() => void chooseItem(allItems[selectedItemIndex - 1]?.item_id ?? "")} type="button">← 上一張</button><span>{Math.max(0, selectedItemIndex + 1)} / {allItems.length}</span><button className="quiet-button" disabled={selectedItemIndex >= allItems.length - 1} onClick={() => void chooseItem(allItems[selectedItemIndex + 1]?.item_id ?? "")} type="button">下一張 →</button></div>
                 </> : <div className="empty-canvas"><span>▧</span><p>{allItems.length ? "選擇一張影像以開始" : "這個資料集目前沒有可用圖片"}</p></div>}
               </section>
@@ -663,8 +700,8 @@ export default function App() {
               <aside className="inspector-column">
                 {stage === "workspace" ? <>
                   <section className="card inspector-card"><div className="inspector-title"><span className="inspector-icon blue">◉</span><div><h2>影像分類</h2><p>快速設定整張圖片類別</p></div></div>
-                    <label className="field-label">分類結果<select value={classification} onChange={(event) => void saveClassification(event.target.value)} disabled={!currentItem}><option value="">尚未分類</option>{(workspace?.classification_labels ?? []).map((label) => <option key={label}>{label}</option>)}{classification && !workspace?.classification_labels.includes(classification) && <option>{classification}</option>}</select></label>
-                    <div className="quick-labels">{(workspace?.classification_labels ?? []).slice(0, 6).map((label) => <button className={classification === label ? "active" : ""} key={label} onClick={() => void saveClassification(label)} type="button">{label}</button>)}</div>
+                    <label className="field-label">分類結果<select value={classification} onChange={(event) => void saveClassification(event.target.value)} disabled={!currentItem || linkedTaskCompleted}><option value="">尚未分類</option>{(workspace?.classification_labels ?? []).map((label) => <option key={label}>{label}</option>)}{classification && !workspace?.classification_labels.includes(classification) && <option>{classification}</option>}</select></label>
+                    <div className="quick-labels">{(workspace?.classification_labels ?? []).slice(0, 6).map((label) => <button className={classification === label ? "active" : ""} key={label} onClick={() => void saveClassification(label)} disabled={linkedTaskCompleted} type="button">{label}</button>)}</div>
                   </section>
                   <section className="card inspector-card"><div className="inspector-title"><span className="inspector-icon violet">✦</span><div><h2>AI 預標注</h2><p>使用本機 YOLO 模型建議框選</p></div></div>
                     <label className="field-label">模型檔案路徑<input value={modelPath} onChange={(event) => setModelPath(event.target.value)} placeholder="選擇本機 .pt 模型" /></label>

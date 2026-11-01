@@ -206,6 +206,19 @@ input:focus, select:focus, textarea:focus { border-color: #8bc5af !important; bo
 .save-state { color: #559477; }
 .save-state.unsaved { color: #c28532; }
 .image-header-actions { display: flex; gap: 6px; flex: 0 0 auto; }
+.linked-iwisc-task { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin: -7px 0 13px; padding: 11px 14px; border: 1px solid #dfeee7; border-radius: 9px; background: #f7fbf9; }
+.linked-iwisc-task.completed { border-color: #e9e8dc; background: #fbfaf5; }
+.linked-iwisc-summary { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.task-status-icon { display: grid; place-items: center; flex: 0 0 auto; width: 27px; height: 27px; border-radius: 50%; color: #258266; background: #e6f4ed; font-size: 13px; font-weight: 800; }
+.linked-iwisc-task.completed .task-status-icon { color: #967032; background: #f3edda; }
+.linked-iwisc-summary strong, .linked-iwisc-summary small { display: block; }
+.linked-iwisc-summary strong { color: #46584f; font-size: 10px; }
+.linked-iwisc-summary small { margin-top: 3px; color: #89978f; font-size: 9px; }
+.linked-iwisc-complete { display: flex; align-items: end; gap: 9px; }
+.linked-iwisc-complete label { display: grid; gap: 4px; color: #78867e; font-size: 8px; }
+.linked-iwisc-complete input { width: 150px; min-height: 31px; padding: 6px 8px; border: 1px solid #dce7e0; border-radius: 6px; background: white; font-size: 9px; }
+.linked-iwisc-complete .primary-button { min-height: 31px; padding: 7px 10px; font-size: 9px; }
+.linked-iwisc-message { margin: 0; color: #8c7950; font-size: 9px; }
 .compact-button { min-height: 31px; padding: 7px 10px; font-size: 9px; }
 .canvas-panel { overflow: hidden; border: 1px solid #e8eeeb; background: #fff; border-radius: 10px; box-shadow: var(--shadow); }
 .canvas-toolbar { display: flex; align-items: center; gap: 9px; min-height: 45px; padding: 6px 10px; border-bottom: 1px solid #eef1ef; }
@@ -374,6 +387,10 @@ input:focus, select:focus, textarea:focus { border-color: #8bc5af !important; bo
   .workbench-heading { align-items: flex-start; flex-direction: column; }
   .workbench-actions { width: 100%; }
   .workbench-actions select { flex: 1; max-width: none; min-width: 0; }
+  .linked-iwisc-task { align-items: flex-start; flex-direction: column; gap: 9px; margin-top: -4px; }
+  .linked-iwisc-complete { width: 100%; }
+  .linked-iwisc-complete label { flex: 1; }
+  .linked-iwisc-complete input { width: 100%; }
   .workbench-grid { grid-template-columns: 1fr; gap: 10px; }
   .item-sidebar { min-height: 0; }
   .item-list { max-height: 240px; min-height: 120px; }

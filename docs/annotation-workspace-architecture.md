@@ -28,10 +28,14 @@ stop the service without embedding Streamlit.
   YOLO model can be invoked through the same API boundary.
 
 The React runtime supports local folder datasets, remote Service downloads, and
-iWISC task listing and claim through the app-owned connector layer. A browser E2E
-journey exercises iWISC registration, listing, claim, and ZIP image ingestion
-against a local HTTP fixture; compatibility with the target service and result
-delivery remain open. The app does not require a cloud service for local work.
+iWISC task listing and claim through the app-owned connector layer. For a claimed
+iWISC task, React annotation sidecars are saved into the local task record before
+completion. The task can be marked complete locally; the current REST connector
+returns `unsupported` for external result delivery, which the UI reports without
+claiming that the external system received the result. A browser E2E journey
+exercises this path against synthetic HTTP services. Compatibility with the target
+service and its delivery contract remain open. The app does not require a cloud
+service for local work.
 
 ## User workflow
 
@@ -50,13 +54,15 @@ bridge is not part of this branch yet.
 
 `react-migration-test-cases.md` is the authoritative Streamlit-to-React behavior
 matrix. It distinguishes implemented behavior from tested behavior and records
-unsupported legacy paths. The former Streamlit app and its scorecard are reference
+unsupported integration paths. The former Streamlit app and its scorecard are reference
 evidence only; they do not establish React parity.
 
 The migration is not release-complete while any required parity row is pending or
 partial. The synthetic browser path now covers dataset creation, Canvas editing,
 classification, review, COCO export, and service restart/readback through the real
-local API. Remote Service ingestion has a local HTTP integration test, and iWISC
-has a browser journey through the real local API and a synthetic external HTTP
-service; compatibility with the target Service, result delivery, a native
-file-picker bridge, and packaged Windows architecture validation remain open.
+local API. Remote Service ingestion has a local HTTP integration test. The iWISC
+browser journey covers claim, annotation-sidecar persistence, local completion,
+read-only state, and the connector's unsupported delivery response through the
+real local API and a synthetic external HTTP service. Target-Service delivery, a
+native file-picker bridge, and packaged Windows architecture validation remain
+open.

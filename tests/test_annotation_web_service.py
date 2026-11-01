@@ -333,6 +333,70 @@ def test_iwisc_task_listing_claim_and_local_manifest_round_trip(tmp_path: Path, 
             for path, auth in calls
             if path != "/artifact.zip"
         )
+
+        manifest_id = created["manifest_id"]
+        item_id = items[0]["item_id"]
+        connection = http.client.HTTPConnection("127.0.0.1", api_server.server_address[1], timeout=10)
+        connection.request(
+            "PUT",
+            f"/api/manifests/{manifest_id}/items/{item_id}/annotation",
+            body=json.dumps({
+                "version": "2.4.0",
+                "shapes": [{"label": "scratch", "shape_type": "rectangle", "points": [[1, 2], [12, 13]]}],
+            }),
+            headers={**headers, "Content-Type": "application/json"},
+        )
+        response = connection.getresponse()
+        assert response.status == 200
+        assert json.loads(response.read())["shape_count"] == 1
+        connection.request(
+            "PUT",
+            f"/api/manifests/{manifest_id}/items/{item_id}/classification",
+            body=json.dumps({"label": "NG"}),
+            headers={**headers, "Content-Type": "application/json"},
+        )
+        response = connection.getresponse()
+        assert response.status == 200
+        assert json.loads(response.read())["classification"] == "NG"
+
+        connection.request(
+            "POST",
+            f"/api/manifests/{manifest_id}/iwisc/complete",
+            body=json.dumps({"annotated_by": "worker-e2e"}),
+            headers={**headers, "Content-Type": "application/json"},
+        )
+        response = connection.getresponse()
+        completed = json.loads(response.read())
+        assert response.status == 200
+        assert completed["task"]["ant_active"] == 2
+        assert completed["task"]["annotated_by"] == "worker-e2e"
+        assert completed["delivery"] == {"status": "unsupported", "error": False}
+        task = service._iwisc_domain_service().get_task(created["iwisc_task_id"])
+        bundle = task["annotation_json"]["react_sidecars"]
+        assert bundle["format"] == "annotation-react-sidecar-bundle/v1"
+        assert bundle["items"][item_id]["annotation"]["shapes"][0]["label"] == "scratch"
+        assert bundle["items"][item_id]["classification"] == "NG"
+
+        connection.request(
+            "PUT",
+            f"/api/manifests/{manifest_id}/items/{item_id}/annotation",
+            body=json.dumps({"version": "2.4.0", "shapes": []}),
+            headers={**headers, "Content-Type": "application/json"},
+        )
+        response = connection.getresponse()
+        assert response.status == 409
+        assert "read-only" in json.loads(response.read())["error"]
+        connection.request(
+            "PUT",
+            f"/api/manifests/{manifest_id}/items/{item_id}/review",
+            body=json.dumps({"status": "approved"}),
+            headers={**headers, "Content-Type": "application/json"},
+        )
+        response = connection.getresponse()
+        assert response.status == 409
+        response.read()
+        connection.close()
+        assert service.iwisc_tasks(tenant["tenant_id"]) == []
     finally:
         if api_server is not None:
             api_server.shutdown()

@@ -214,6 +214,9 @@ def make_handler(
                 if len(parts) == 4 and parts[1] == "manifests" and parts[3] == "prelabel":
                     self._json(200, service.run_yolo(parts[2], body))
                     return
+                if len(parts) == 5 and parts[1] == "manifests" and parts[3:] == ["iwisc", "complete"]:
+                    self._json(200, service.complete_iwisc_task(parts[2], str(body.get("annotated_by") or "")))
+                    return
                 if len(parts) == 6 and parts[1] == "manifests" and parts[3] == "items" and parts[5] == "launch":
                     self._json(
                         200,

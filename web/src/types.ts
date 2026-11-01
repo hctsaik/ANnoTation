@@ -29,6 +29,14 @@ export type IwiscTask = {
   external_context: Record<string, string>;
 };
 
+export type LinkedIwiscTask = {
+  task_id: string;
+  ant_id: string;
+  ant_active: number;
+  annotated_by: string;
+  delivery_status: string;
+};
+
 export type Shape = {
   label: string;
   shape_type: string;
@@ -79,6 +87,7 @@ export type Workspace = {
   labels: string[];
   classification_labels: string[];
   annotation_tool: string;
+  iwisc_task?: LinkedIwiscTask | null;
   items: Item[];
 };
 

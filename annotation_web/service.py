@@ -228,6 +228,7 @@ class AnnotationService:
             "item_count": result.get("total_count", 0),
             "source_type": "iwisc" if mode == "iwisc" else mode,
             "iwisc_ant_id": result.get("iwsc_ant_id"),
+            "iwisc_task_id": result.get("iwsc_task_id"),
             "yolo_seed": {
                 key: seed[key]
                 for key in ("applied", "classes", "reason")
@@ -359,8 +360,125 @@ class AnnotationService:
             })
         return tasks
 
+    @staticmethod
+    def _iwisc_manifest_ref(manifest: dict[str, Any]) -> dict[str, str] | None:
+        source = manifest.get("source_config") or {}
+        if manifest.get("source_type") not in {"iwsc", "iwisc"} or not isinstance(source, dict):
+            return None
+        task_id = str(source.get("task_id") or "").strip()
+        tenant_id = str(source.get("tenant_id") or "").strip()
+        ant_id = str(source.get("ant_id") or "").strip()
+        if not task_id or not _ID_PATTERN.fullmatch(task_id):
+            return None
+        if not _ID_PATTERN.fullmatch(tenant_id) or not _EXTERNAL_TASK_ID_PATTERN.fullmatch(ant_id):
+            raise ServiceError(500, "The linked external task reference is invalid")
+        return {"task_id": task_id, "tenant_id": tenant_id, "ant_id": ant_id}
+
+    @staticmethod
+    def _public_iwisc_task(task: dict[str, Any]) -> dict[str, Any]:
+        delivery_status = task.get("delivery_status")
+        return {
+            "task_id": str(task.get("task_id") or ""),
+            "ant_id": str(task.get("ant_id") or ""),
+            "ant_active": int(task.get("ant_active") or 0),
+            "annotated_by": str(task.get("annotated_by") or ""),
+            "delivery_status": str(delivery_status.get("status") or "")
+            if isinstance(delivery_status, dict) else "",
+        }
+
+    def _linked_iwisc_task(self, manifest: dict[str, Any]) -> dict[str, Any] | None:
+        reference = self._iwisc_manifest_ref(manifest)
+        if reference is None:
+            return None
+        try:
+            task = self._iwisc_domain_service().get_task(reference["task_id"])
+        except Exception as exc:
+            raise ServiceError(409, "The linked iWISC task is no longer available") from exc
+        if task.get("tenant_id") != reference["tenant_id"] or task.get("ant_id") != reference["ant_id"]:
+            raise ServiceError(409, "The linked iWISC task does not match this dataset")
+        return self._public_iwisc_task(task)
+
+    def _require_open_iwisc_task(self, manifest: dict[str, Any]) -> dict[str, Any] | None:
+        reference = self._iwisc_manifest_ref(manifest)
+        if reference is None:
+            return None
+        try:
+            task = self._iwisc_domain_service().get_task(reference["task_id"])
+        except Exception as exc:
+            raise ServiceError(409, "The linked iWISC task is no longer available") from exc
+        if task.get("tenant_id") != reference["tenant_id"] or task.get("ant_id") != reference["ant_id"]:
+            raise ServiceError(409, "The linked iWISC task does not match this dataset")
+        if int(task.get("ant_active") or 0) == 2:
+            raise ServiceError(409, "This iWISC task is complete and read-only")
+        return task
+
+    def _sync_iwisc_task_bundle(self, manifest_id: str, item_id: str | None = None) -> dict[str, Any] | None:
+        manifest = self._manifest(manifest_id)
+        reference = self._iwisc_manifest_ref(manifest)
+        if reference is None:
+            return None
+        task = self._require_open_iwisc_task(manifest)
+        if task is None:
+            return None
+        domain_service = self._iwisc_domain_service()
+
+        rows = manifest_db.get_manifest_items(self.db_path, manifest_id)
+        if item_id is not None:
+            if not _ID_PATTERN.fullmatch(item_id):
+                raise ServiceError(400, "Invalid image identifier")
+            rows = [row for row in rows if row.get("item_id") == item_id]
+            if not rows:
+                raise ServiceError(404, "Image not found in this dataset")
+
+        annotation_json = task.get("annotation_json")
+        annotation_json = dict(annotation_json) if isinstance(annotation_json, dict) else {}
+        prior_bundle = annotation_json.get("react_sidecars")
+        sidecar_items = dict(prior_bundle.get("items") or {}) if isinstance(prior_bundle, dict) else {}
+        classifications = self._process("012")._cfg.load_classifications(manifest_id)
+        for row in rows:
+            current_id = str(row.get("item_id") or "")
+            path = self._local_item_path(manifest, row)
+            annotation = self._read_annotation(str(path.with_suffix(".json")))
+            sidecar_items[current_id] = {
+                "image_name": path.name,
+                "annotation": annotation,
+                "classification": str(classifications.get(current_id) or ""),
+            }
+        annotation_json["react_sidecars"] = {
+            "format": "annotation-react-sidecar-bundle/v1",
+            "items": sidecar_items,
+        }
+        try:
+            return domain_service.save_annotation(reference["task_id"], annotation_json)
+        except Exception as exc:
+            raise ServiceError(502, "The image was saved locally, but its iWISC task record could not be updated") from exc
+
+    def complete_iwisc_task(self, manifest_id: str, annotated_by: str) -> dict[str, Any]:
+        worker_id = str(annotated_by or "").strip()
+        if not worker_id or len(worker_id) > 128 or any(ord(char) < 32 for char in worker_id):
+            raise ServiceError(400, "Enter a valid operator ID before completing this task")
+        manifest = self._manifest(manifest_id)
+        reference = self._iwisc_manifest_ref(manifest)
+        if reference is None:
+            raise ServiceError(400, "This dataset is not linked to an iWISC task")
+        self._require_open_iwisc_task(manifest)
+        self._sync_iwisc_task_bundle(manifest_id)
+        try:
+            result = self._iwisc_domain_service().complete_task(reference["task_id"], worker_id)
+        except Exception as exc:
+            raise ServiceError(502, "The iWISC task could not be marked complete locally") from exc
+        delivery = result.get("delivery") if isinstance(result.get("delivery"), dict) else {}
+        status = str(delivery.get("status") or "unknown")
+        return {
+            "task": self._public_iwisc_task(result),
+            "delivery": {
+                "status": status,
+                "error": status == "error",
+            },
+        }
+
     def workspace(self, manifest_id: str, settings: dict[str, Any] | None = None) -> dict[str, Any]:
-        self._manifest(manifest_id)
+        manifest = self._manifest(manifest_id)
         cfg = self._process("012")._cfg
         saved = cfg.load_config()
         values = settings or {}
@@ -411,6 +529,7 @@ class AnnotationService:
             "labels": result.get("labels", []),
             "classification_labels": result.get("classification_labels", []),
             "annotation_tool": result.get("annotation_tool", "x-anylabeling"),
+            "iwisc_task": self._linked_iwisc_task(manifest),
             "items": items,
         }
 
@@ -557,6 +676,7 @@ class AnnotationService:
         return cls._review_data(file_path)["review_status"]
 
     def save_annotation(self, manifest_id: str, item_id: str, value: dict[str, Any]) -> dict[str, Any]:
+        self._require_open_iwisc_task(self._manifest(manifest_id))
         manifest, item = self._raw_item(manifest_id, item_id)
         path = self._local_item_path(manifest, item)
         shapes = value.get("shapes")
@@ -604,9 +724,11 @@ class AnnotationService:
             "imageWidth": int(item.get("width") or value.get("imageWidth") or 0),
         }
         _atomic_json(annotation_path, updated)
+        self._sync_iwisc_task_bundle(manifest_id, item_id)
         return {"item_id": item_id, "saved": True, "shape_count": len(checked_shapes)}
 
     def save_classification(self, manifest_id: str, item_id: str, label: str) -> dict[str, Any]:
+        self._require_open_iwisc_task(self._manifest(manifest_id))
         manifest, item = self._raw_item(manifest_id, item_id)
         path = self._local_item_path(manifest, item)
         cfg = self._process("012")._cfg
@@ -623,9 +745,11 @@ class AnnotationService:
         else:
             by_path.pop(str(path), None)
         cfg.save_classifications_by_path(by_path)
+        self._sync_iwisc_task_bundle(manifest_id, item_id)
         return {"item_id": item_id, "classification": label}
 
     def review(self, manifest_id: str, item_id: str, status: str, comment: str = "") -> dict[str, Any]:
+        self._require_open_iwisc_task(self._manifest(manifest_id))
         manifest, item = self._raw_item(manifest_id, item_id)
         path = self._local_item_path(manifest, item)
         if status not in {"pending", "approved", "rejected"}:
@@ -672,7 +796,7 @@ class AnnotationService:
         ]
 
     def update_labels(self, manifest_id: str, action: str, params: dict[str, Any]) -> dict[str, Any]:
-        self._manifest(manifest_id)
+        self._require_open_iwisc_task(self._manifest(manifest_id))
         module = self._process("017")
         context = {"manifest_id": manifest_id}
         if action == "rename":
@@ -705,6 +829,7 @@ class AnnotationService:
         tool_id: str,
         executable_override: str = "",
     ) -> dict[str, Any]:
+        self._require_open_iwisc_task(self._manifest(manifest_id))
         manifest, item = self._raw_item(manifest_id, item_id)
         path = self._local_item_path(manifest, item)
         if tool_id not in TOOLS:
@@ -727,7 +852,7 @@ class AnnotationService:
         return {"launched": True, "tool": tool_id, "item_id": item_id}
 
     def run_yolo(self, manifest_id: str, params: dict[str, Any]) -> dict[str, Any]:
-        self._manifest(manifest_id)
+        self._require_open_iwisc_task(self._manifest(manifest_id))
         model_path = Path(str(params.get("model_path") or "")).expanduser().resolve()
         if not model_path.is_file():
             raise ServiceError(400, "Select a local YOLO model file")

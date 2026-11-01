@@ -7,6 +7,7 @@ type Props = {
   imageUrl: string;
   annotation: Annotation;
   labels: string[];
+  readOnly?: boolean;
   onChange: (value: Annotation) => void;
 };
 
@@ -21,7 +22,7 @@ type Gesture = {
 
 const MIN_SIZE = 3;
 
-export function AnnotationCanvas({ itemKey, imageUrl, annotation, labels, onChange }: Props) {
+export function AnnotationCanvas({ itemKey, imageUrl, annotation, labels, readOnly = false, onChange }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
   const gestureRef = useRef<Gesture | null>(null);
@@ -103,6 +104,7 @@ export function AnnotationCanvas({ itemKey, imageUrl, annotation, labels, onChan
   }
 
   function emit(next: Box[]) {
+    if (readOnly) return;
     setBoxes(next);
     onChange(replaceRectangles(annotation, next));
   }
@@ -123,7 +125,7 @@ export function AnnotationCanvas({ itemKey, imageUrl, annotation, labels, onChan
   }
 
   function pointerDown(event: PointerEvent<HTMLCanvasElement>) {
-    if (!dimensions.width || !dimensions.height) return;
+    if (readOnly || !dimensions.width || !dimensions.height) return;
     event.currentTarget.focus();
     event.currentTarget.setPointerCapture(event.pointerId);
     const { x, y } = coords(event);
@@ -151,6 +153,7 @@ export function AnnotationCanvas({ itemKey, imageUrl, annotation, labels, onChan
   }
 
   function pointerMove(event: PointerEvent<HTMLCanvasElement>) {
+    if (readOnly) return;
     const gesture = gestureRef.current;
     if (!gesture) return;
     const { x, y } = coords(event);
@@ -173,6 +176,10 @@ export function AnnotationCanvas({ itemKey, imageUrl, annotation, labels, onChan
   }
 
   function pointerUp() {
+    if (readOnly) {
+      gestureRef.current = null;
+      return;
+    }
     const gesture = gestureRef.current;
     if (!gesture) return;
     gestureRef.current = null;
@@ -207,6 +214,7 @@ export function AnnotationCanvas({ itemKey, imageUrl, annotation, labels, onChan
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (readOnly) return;
     const target = event.target as HTMLElement;
     if (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
@@ -236,17 +244,17 @@ export function AnnotationCanvas({ itemKey, imageUrl, annotation, labels, onChan
     <section className="canvas-panel" aria-label="圖片標注編輯器">
       <div className="canvas-toolbar">
         <div className="tool-switch" role="group" aria-label="標注工具">
-          <button className={tool === "draw" ? "active" : ""} onClick={() => setTool("draw")} type="button">▱ 框選</button>
-          <button className={tool === "select" ? "active" : ""} onClick={() => setTool("select")} type="button">↖ 選取</button>
+          <button className={tool === "draw" ? "active" : ""} onClick={() => setTool("draw")} disabled={readOnly} type="button">▱ 框選</button>
+          <button className={tool === "select" ? "active" : ""} onClick={() => setTool("select")} disabled={readOnly} type="button">↖ 選取</button>
         </div>
         <label className="label-picker">目前類別
-          <select aria-label="目前類別" value={activeLabel} onChange={(event) => setActiveLabel(event.target.value)}>
+          <select aria-label="目前類別" value={activeLabel} onChange={(event) => setActiveLabel(event.target.value)} disabled={readOnly}>
             {(labels.length ? labels : ["object"]).map((label) => <option key={label}>{label}</option>)}
           </select>
         </label>
         <span className="toolbar-spacer" />
-        <button className="quiet-button" onClick={undo} disabled={!undoCount} type="button">↶ 復原</button>
-        <button className="quiet-button" onClick={redo} disabled={!redoCount} type="button">↷ 重做</button>
+        <button className="quiet-button" onClick={undo} disabled={readOnly || !undoCount} type="button">↶ 復原</button>
+        <button className="quiet-button" onClick={redo} disabled={readOnly || !redoCount} type="button">↷ 重做</button>
       </div>
       <div className="canvas-frame" onKeyDown={onKeyDown} tabIndex={0}>
         {dimensions.width > 0 ? (
@@ -266,11 +274,11 @@ export function AnnotationCanvas({ itemKey, imageUrl, annotation, labels, onChan
         {boxes.length === 0 ? <span className="muted small">拖曳圖片即可新增框選</span> : boxes.map((box, index) => (
           <div className={`box-row ${index === selected ? "selected" : ""}`} key={`${index}-${box.x}-${box.y}`}>
             <button className="box-select" onClick={() => setSelected(index)} type="button">{String(index + 1).padStart(2, "0")}</button>
-            <select aria-label={`第 ${index + 1} 個框選類別`} value={box.label} onChange={(event) => changeLabel(index, event.target.value)}>
+            <select aria-label={`第 ${index + 1} 個框選類別`} value={box.label} onChange={(event) => changeLabel(index, event.target.value)} disabled={readOnly}>
               {[...new Set([box.label, ...labels])].map((label) => <option key={label}>{label}</option>)}
             </select>
             <span className="box-coordinates">{Math.round(box.width)} × {Math.round(box.height)}</span>
-            <button className="icon-button danger-text" aria-label={`刪除第 ${index + 1} 個框選`} onClick={() => {
+            <button className="icon-button danger-text" aria-label={`刪除第 ${index + 1} 個框選`} disabled={readOnly} onClick={() => {
               commit(boxes);
               setSelected(-1);
               emit(boxes.filter((_item, row) => row !== index));
@@ -278,7 +286,7 @@ export function AnnotationCanvas({ itemKey, imageUrl, annotation, labels, onChan
           </div>
         ))}
       </div>
-      <p className="canvas-hint">拖曳框選；拖動框內可移動，拖動右下角可調整大小。快捷鍵：Delete 刪除、Ctrl+Z 復原、Ctrl+Y 重做。</p>
+      <p className="canvas-hint">{readOnly ? "此外部任務已完成，標注內容為唯讀。" : "拖曳框選；拖動框內可移動，拖動右下角可調整大小。快捷鍵：Delete 刪除、Ctrl+Z 復原、Ctrl+Y 重做。"}</p>
     </section>
   );
 }

@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
     iwiscTenants: vi.fn(),
     iwiscTasks: vi.fn(),
     registerIwiscTenant: vi.fn(),
+    completeIwiscTask: vi.fn(),
     saveAnnotation: vi.fn(),
     createDataset: vi.fn(),
     review: vi.fn(),
@@ -40,6 +41,7 @@ describe("ANnoTation workflow shell", () => {
     mocks.api.iwiscTenants.mockResolvedValue({ tenants: [{ tenant_id: "tenant-1", system_name: "AOI Line 1", server_host_name: "http://aoi.internal", target_format: "coco", has_api_token: true }] });
     mocks.api.iwiscTasks.mockResolvedValue({ tasks: [{ ant_id: "ant-01", ant_active: 0, ant_period: "2026-11", external_context: { lot: "L01" } }] });
     mocks.api.registerIwiscTenant.mockResolvedValue({ tenant_id: "tenant-2", system_name: "AOI Line 2", server_host_name: "http://aoi-2.internal", target_format: "coco", has_api_token: false });
+    mocks.api.completeIwiscTask.mockResolvedValue({ task: { task_id: "task-1", ant_id: "ant-01", ant_active: 2, annotated_by: "worker-9", delivery_status: "unsupported" }, delivery: { status: "unsupported", error: false } });
     mocks.api.review.mockResolvedValue({ status: "approved" });
     mocks.api.saveClassification.mockResolvedValue({ classification: "OK" });
     mocks.api.export.mockResolvedValue({ mode: "done", total_items: 2, annotated_items: 1 });
@@ -96,6 +98,22 @@ describe("ANnoTation workflow shell", () => {
       user_id: "worker-7",
     }));
     expect(await screen.findByText(/任務 ant-01 已載入/)).toBeInTheDocument();
+  });
+
+  it("completes a linked iWISC task and locks its editor when external delivery is unsupported", async () => {
+    const openWorkspace = { ...workspace, iwisc_task: { task_id: "task-1", ant_id: "ant-01", ant_active: 1, annotated_by: "worker-7", delivery_status: "" } };
+    const completedWorkspace = { ...openWorkspace, iwisc_task: { ...openWorkspace.iwisc_task, ant_active: 2, annotated_by: "worker-9", delivery_status: "unsupported" } };
+    mocks.api.workspace.mockReset().mockResolvedValueOnce(openWorkspace).mockResolvedValue(completedWorkspace);
+    render(<App />);
+    const operator = await screen.findByLabelText("完成任務作業員工號");
+    fireEvent.change(operator, { target: { value: "worker-9" } });
+    fireEvent.click(screen.getByRole("button", { name: /保存並完成任務/ }));
+
+    await waitFor(() => expect(mocks.api.completeIwiscTask).toHaveBeenCalledWith("demo", "worker-9"));
+    expect(within(screen.getByRole("region", { name: "iWISC 任務狀態" })).getByText(/外部結果回傳尚未支援/)).toBeInTheDocument();
+    expect(screen.queryByLabelText("完成任務作業員工號")).not.toBeInTheDocument();
+    expect(screen.getByText("此外部任務已完成，標注內容為唯讀。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /保存標注/ })).toBeDisabled();
   });
 
   it("registers an iWISC connection without echoing the API key into the page", async () => {

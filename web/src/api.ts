@@ -1,4 +1,4 @@
-import type { Annotation, ExportResult, IwiscTask, IwiscTenant, Item, LabelAnalysis, Manifest, RemoteDataset, Workspace } from "./types";
+import type { Annotation, ExportResult, IwiscTask, IwiscTenant, Item, LabelAnalysis, LinkedIwiscTask, Manifest, RemoteDataset, Workspace } from "./types";
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
 let tokenPromise: Promise<string> | undefined;
@@ -54,8 +54,13 @@ export const api = {
     }),
   iwiscTasks: (tenantId: string) =>
     request<{ tasks: IwiscTask[] }>(`/api/sources/iwisc/tasks?${new URLSearchParams({ tenant_id: tenantId })}`),
+  completeIwiscTask: (manifestId: string, annotatedBy: string) =>
+    request<{ task: LinkedIwiscTask; delivery: { status: string; error: boolean } }>(
+      `/api/manifests/${encodeURIComponent(manifestId)}/iwisc/complete`,
+      { method: "POST", body: JSON.stringify({ annotated_by: annotatedBy }) },
+    ),
   createDataset: (body: Record<string, unknown>) =>
-    request<{ manifest_id: string; name: string; item_count: number; source_type?: string; iwisc_ant_id?: string | null }>("/api/manifests", {
+    request<{ manifest_id: string; name: string; item_count: number; source_type?: string; iwisc_ant_id?: string | null; iwisc_task_id?: string | null }>("/api/manifests", {
       method: "POST",
       body: JSON.stringify(body),
     }),
