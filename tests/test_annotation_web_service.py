@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import io
+import hashlib
 import http.client
+import io
 import json
 import sys
 import threading
@@ -97,6 +98,54 @@ def test_local_dataset_image_and_annotation_round_trip(service_and_dataset):
     assert merged["labels"]["label_map"] == {"dent": 1}
     deleted = service.update_labels(created["manifest_id"], "delete", {"label": "dent"})
     assert deleted["labels"]["label_map"] == {}
+
+
+def test_local_dataset_scans_supported_formats_recursively_or_root_only(
+    tmp_path: Path,
+):
+    source = tmp_path / "format-matrix"
+    nested = source / "nested"
+    nested.mkdir(parents=True)
+    formats = {
+        ".jpg": "JPEG",
+        ".jpeg": "JPEG",
+        ".png": "PNG",
+        ".bmp": "BMP",
+        ".webp": "WEBP",
+        ".tif": "TIFF",
+        ".tiff": "TIFF",
+    }
+    for index, (extension, image_format) in enumerate(formats.items()):
+        Image.new("RGB", (16, 12), (20 + index * 20, 90, 160)).save(
+            source / f"root-{index}{extension}", format=image_format,
+        )
+    Image.new("RGB", (16, 12), "#aa5500").save(source / "upper.PNG", format="PNG")
+    Image.new("RGB", (16, 12), "#0055aa").save(nested / "nested.jpeg", format="JPEG")
+    (source / "ignore.gif").write_bytes(b"not part of the supported image matrix")
+    (source / "notes.txt").write_text("ignore this", encoding="utf-8")
+    source_files = [path for path in source.rglob("*") if path.is_file()]
+    source_hashes = {path: hashlib.sha256(path.read_bytes()).hexdigest() for path in source_files}
+    service = AnnotationService(tmp_path / "format-matrix-app-data")
+
+    recursive = service.create_dataset({
+        "folder_path": str(source), "manifest_name": "All formats recursive", "recursive": True,
+    })
+    recursive_items = manifest_db.get_manifest_items(service.db_path, recursive["manifest_id"])
+    recursive_names = {Path(item["file_path"]).relative_to(source).as_posix() for item in recursive_items}
+    expected_recursive = {f"root-{index}{extension}" for index, extension in enumerate(formats)}
+    expected_recursive |= {"upper.PNG", "nested/nested.jpeg"}
+    assert recursive["item_count"] == len(expected_recursive) == 9
+    assert recursive_names == expected_recursive
+    assert {(item["width"], item["height"]) for item in recursive_items} == {(16, 12)}
+
+    root_only = service.create_dataset({
+        "folder_path": str(source), "manifest_name": "All formats root only", "recursive": False,
+    })
+    root_items = manifest_db.get_manifest_items(service.db_path, root_only["manifest_id"])
+    root_names = {Path(item["file_path"]).relative_to(source).as_posix() for item in root_items}
+    assert root_only["item_count"] == len(expected_recursive) - 1
+    assert root_names == expected_recursive - {"nested/nested.jpeg"}
+    assert {path: hashlib.sha256(path.read_bytes()).hexdigest() for path in source_files} == source_hashes
 
 
 def test_iwisc_result_delivery_registration_is_opt_in_and_redacted(service_and_dataset):
