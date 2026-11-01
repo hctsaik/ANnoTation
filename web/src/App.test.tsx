@@ -23,9 +23,19 @@ const mocks = vi.hoisted(() => ({
     labelAction: vi.fn(),
   },
   loadImageUrl: vi.fn(),
+  desktopHost: false,
+  pickDirectory: vi.fn(),
+  pickExecutable: vi.fn(),
+  pickModelFile: vi.fn(),
 }));
 
 vi.mock("./api", () => ({ api: mocks.api, loadImageUrl: mocks.loadImageUrl }));
+vi.mock("./host", () => ({
+  isDesktopHost: () => mocks.desktopHost,
+  pickDirectory: mocks.pickDirectory,
+  pickExecutable: mocks.pickExecutable,
+  pickModelFile: mocks.pickModelFile,
+}));
 
 const manifest = { manifest_id: "demo", name: "Inspection set", source_type: "folder", created_at: "2026-01-01", item_count: 2 };
 const itemA = { item_id: "img-a", name: "panel-a.png", image_url: "image", width: 40, height: 30, has_annotation: true, has_bbox: true, has_classification: true, classification: "OK", shape_count: 1, labels: ["scratch"], review_status: "pending" as const };
@@ -35,6 +45,7 @@ const workspace = { manifest_id: "demo", manifest_name: "Inspection set", total:
 describe("ANnoTation workflow shell", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.desktopHost = false;
     localStorage.clear();
     mocks.api.manifests.mockResolvedValue({ manifests: [manifest] });
     mocks.api.workspace.mockResolvedValue(workspace);
@@ -82,6 +93,32 @@ describe("ANnoTation workflow shell", () => {
     expect(stages.getByRole("button", { name: /資料集/ })).toBeInTheDocument();
     expect(stages.getByRole("button", { name: /審核/ })).toBeInTheDocument();
     expect(stages.getByRole("button", { name: /匯出/ })).toBeInTheDocument();
+  });
+
+  it("uses native host pickers to fill local dataset, model, tool and export paths", async () => {
+    mocks.desktopHost = true;
+    mocks.pickDirectory
+      .mockResolvedValueOnce("D:\\datasets\\inspection")
+      .mockResolvedValueOnce("D:\\exports\\inspection");
+    mocks.pickModelFile.mockResolvedValue("D:\\models\\yolo.pt");
+    mocks.pickExecutable.mockResolvedValue("C:\\Tools\\labelme.exe");
+    render(<App />);
+    await screen.findByRole("heading", { name: "標注工作台" });
+    const stages = within(screen.getByRole("navigation", { name: "工作流程" }));
+
+    fireEvent.click(stages.getByRole("button", { name: /資料集/ }));
+    fireEvent.click(screen.getByRole("button", { name: "選擇影像資料夾…" }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "資料夾路徑" })).toHaveValue("D:\\datasets\\inspection"));
+
+    fireEvent.click(stages.getByRole("button", { name: /標注工作台/ }));
+    fireEvent.click(screen.getByRole("button", { name: "選擇模型檔案…" }));
+    await waitFor(() => expect(screen.getByPlaceholderText("選擇本機 .pt 模型")).toHaveValue("D:\\models\\yolo.pt"));
+    fireEvent.click(screen.getByRole("button", { name: "選擇工具執行檔…" }));
+    await waitFor(() => expect(screen.getByPlaceholderText("工具未加入 PATH 時指定")).toHaveValue("C:\\Tools\\labelme.exe"));
+
+    fireEvent.click(stages.getByRole("button", { name: /匯出/ }));
+    fireEvent.click(screen.getByRole("button", { name: "選擇匯出資料夾…" }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "資料夾路徑" })).toHaveValue("D:\\exports\\inspection"));
   });
 
   it("loads and creates a dataset from a remote Service", async () => {

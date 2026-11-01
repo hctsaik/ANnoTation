@@ -16,7 +16,7 @@ has a synthetic real-service browser journey, and iWISC has a separate browser-t
 service journey against a local HTTP fixture. This branch is not release-complete:
 see the
 [migration acceptance matrix](docs/react-migration-test-cases.md) for pending
-source modes, desktop integration, and end-to-end coverage.
+source modes, packaged desktop integration, and remaining end-to-end coverage.
 
 ## Run the built local app
 
@@ -47,9 +47,22 @@ Set-Location web
 npm run dev
 ```
 
-Vite proxies API requests to the local Python service. Dataset and model paths
-are entered directly for now; native file and folder pickers require the desktop
-host bridge tracked in the acceptance matrix.
+Vite proxies API requests to the local Python service. Browser mode accepts paths
+as text. The Tauri development host also exposes native folder and file pickers
+and starts the loopback Python service:
+
+```powershell
+py -3.11-64 -m pip install -r requirements-web.txt
+Set-Location web
+npm ci
+npm run tauri:dev
+```
+
+Set `ANNOTATION_PYTHON` to a Python 3.11 executable if the Python launcher does
+not select the intended environment or architecture. The development host stores
+its service log and app data in the operating system's per-user app-data
+directory. It is not a packaged release: the Tauri bundle is disabled until the
+Python runtime and service dependencies have a reproducible distribution package.
 
 ## Local model support
 

@@ -18,5 +18,9 @@ web/playwright-report/
 web/.vite/
 *.tsbuildinfo
 
+# Tauri build outputs and generated permission schemas
+web/src-tauri/target/
+web/src-tauri/gen/schemas/
+
 # Local runtime logs and data
 tmp/

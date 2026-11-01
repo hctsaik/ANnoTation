@@ -1,10 +1,11 @@
 import type { Annotation, ExportResult, IwiscTask, IwiscTenant, Item, LabelAnalysis, LinkedIwiscTask, Manifest, RemoteDataset, Workspace } from "./types";
+import { getApiBase } from "./host";
 
-const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
 let tokenPromise: Promise<string> | undefined;
 
 async function sessionToken(): Promise<string> {
-  tokenPromise ??= fetch(`${API_BASE}/api/session`)
+  tokenPromise ??= getApiBase()
+    .then((base) => fetch(`${base}/api/session`))
     .then(async (response) => {
       if (!response.ok) throw new Error("無法連線到本機 ANnoTation 服務");
       const value = (await response.json()) as { token?: string };
@@ -20,10 +21,11 @@ async function sessionToken(): Promise<string> {
 
 export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = await sessionToken();
+  const base = await getApiBase();
   const headers = new Headers(init.headers);
   headers.set("X-Annotation-Token", token);
   if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-  const response = await fetch(`${API_BASE}${path}`, { ...init, headers });
+  const response = await fetch(`${base}${path}`, { ...init, headers });
   if (!response.ok) {
     const value = (await response.json().catch(() => ({}))) as { error?: string };
     throw new Error(value.error || `請求失敗（${response.status}）`);
@@ -34,8 +36,9 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
 
 export async function loadImageUrl(manifestId: string, itemId: string): Promise<string> {
   const token = await sessionToken();
+  const base = await getApiBase();
   const response = await fetch(
-    `${API_BASE}/api/manifests/${encodeURIComponent(manifestId)}/items/${encodeURIComponent(itemId)}/image`,
+    `${base}/api/manifests/${encodeURIComponent(manifestId)}/items/${encodeURIComponent(itemId)}/image`,
     { headers: { "X-Annotation-Token": token } },
   );
   if (!response.ok) throw new Error("無法讀取圖片");

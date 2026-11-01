@@ -11,10 +11,15 @@ The React branch has a working local-folder workflow and a first Canvas editor.
 legacy scenario has passed end-to-end. Release parity remains open while a row is
 partial or pending.
 
-Local validation for this branch: 15 Vitest tests, 6 Playwright tests (including
-real local-folder and synthetic iWISC → React → Python service journeys), and
-179 Python tests pass; the production Vite build succeeds. Windows ARM64,
-packaged-host, target-Service, and real-model checks remain pending.
+Latest focused validation (2026-11-02): 21 Vitest tests, 8 Playwright tests
+(including real local-folder and synthetic iWISC → React → Python service
+journeys), a production Vite build, `cargo check`, and 183 Python tests under
+`tests/` pass. Full pytest collection currently stops because two legacy module
+tests expect `C:\code\claude\scripts\shared\_manifest_db.py` outside this checkout.
+The Tauri dev host launched on this Windows ARM64 machine as an x86_64 build; its
+loopback service returned a session token on a dynamic port and exited with the
+host. Native picker UI inspection, packaged host, native ARM64, target-Service,
+and real-model checks remain pending.
 
 | ID | Existing behavior to preserve | React implementation | Evidence and remaining work | Status |
 |---|---|---|---|---|
@@ -32,7 +37,7 @@ packaged-host, target-Service, and real-model checks remain pending.
 | REVIEW-01 | Filter the QA queue and persist approve/reject status and comments | Review stage records per-image status and comment; review confirmation is stored in browser local storage | The real-service browser journey saves both an approval and a rejection with comments, restarts the service, filters for rejected items, and verifies the rejected status and comment in React | Implemented; local approve/reject persistence journey passes; CI and packaged-host evidence pending |
 | EXPORT-01 | Select COCO, YOLO, VOC, ImageFolder, or CSV; optionally split data; block unsafe export | React export panel checks completion, partial-export opt-in, review confirmation, and module 014 validation | The real-service browser journey selects all five formats with a 100/0/0 split and checks COCO boxes, YOLO labels, VOC XML/index, ImageFolder copy, CSV split/label values, and all five history records after service restart; an invalid Windows output path reports this attempt's error while retaining the prior successful history | Implemented; local multi-format, split, and path-failure journeys pass; CI and other split-ratio evidence pending |
 | LOCAL-01 | Keep local data inside the app boundary and reject unrelated image paths | Loopback API uses a session token, checks browser origin, and applies the dataset folder grant | Python service/API tests check token, origin, and path grant | Implemented; tests pass locally |
-| HOST-01 | Open the app as a native desktop window with local file/folder pickers and controlled sidecar lifecycle | The React build is served by the loopback Python process; native host bridge is not included | Add a desktop host, native dialogs, process lifecycle, and packaged-app launch/restart tests | Pending |
+| HOST-01 | Open the app as a native desktop window with local file/folder pickers and controlled sidecar lifecycle | Tauri development host starts the loopback Python service, passes its dynamic API base to React, stops it on exit, and exposes native directory/model/tool pickers | `cargo check` and `npm run tauri:dev` pass; the service responds at its assigned loopback port and is gone after host exit; Vitest covers the host API and all four picker bindings. Native picker UI inspection and packaged Python-runtime, restart/failure, and architecture evidence remain | Partial; development integration is implemented, release bundle remains disabled |
 
 ## Required gates before claiming parity
 
@@ -42,8 +47,10 @@ packaged-host, target-Service, and real-model checks remain pending.
    export path on a synthetic dataset using the real local API, not only a mock.
 3. Service tests cover malformed inputs, local path boundaries, and persisted
    annotations, classifications, review decisions, and exports.
-4. The packaged desktop host starts the local service without opening a console,
-   supports the intended Windows architectures, and passes the same workflow.
+4. The packaged desktop host bundles or installs the supported Python runtime,
+   starts the local service without opening a console, supports the intended
+   Windows architectures, and passes the same workflow. The current Tauri
+   development host does not satisfy this release gate.
 
 The test layers are kept beside the code: React unit tests in web/src/, browser
 tests in web/e2e/, and Python service/API tests in tests/.

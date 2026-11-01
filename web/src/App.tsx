@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { AnnotationCanvas } from "./AnnotationCanvas";
 import { api, loadImageUrl } from "./api";
+import { isDesktopHost, pickDirectory, pickExecutable, pickModelFile } from "./host";
 import { filterItems } from "./annotationModel";
 import type { Annotation, ExportResult, IwiscTask, IwiscTenant, Item, LabelAnalysis, Manifest, RemoteDataset, Stage, Workspace } from "./types";
 
@@ -32,6 +33,7 @@ function shortError(error: unknown) {
 }
 
 export default function App() {
+  const desktopHost = isDesktopHost();
   const [manifests, setManifests] = useState<Manifest[]>([]);
   const [manifestId, setManifestId] = useState("");
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
@@ -94,6 +96,24 @@ export default function App() {
   const [split, setSplit] = useState({ train: 70, val: 15, test: 15, stratified: true });
   const [exportResult, setExportResult] = useState<ExportResult | null>(null);
   const [exportHistory, setExportHistory] = useState<Array<{ export_id: string; format: string; item_count: number; created_at: string }>>([]);
+
+  async function choosePath(kind: "dataset" | "export" | "model" | "tool") {
+    try {
+      const current = kind === "dataset" ? folderPath : kind === "export" ? exportDir : kind === "model" ? modelPath : toolExecutable;
+      const selected = kind === "model"
+        ? await pickModelFile(current || undefined)
+        : kind === "tool"
+          ? await pickExecutable(current || undefined)
+          : await pickDirectory(current || undefined);
+      if (selected === null) return;
+      if (kind === "dataset") setFolderPath(selected);
+      else if (kind === "export") setExportDir(selected);
+      else if (kind === "model") setModelPath(selected);
+      else setToolExecutable(selected);
+    } catch (reason) {
+      setError(shortError(reason));
+    }
+  }
 
   useEffect(() => {
     let active = true;
@@ -619,6 +639,7 @@ export default function App() {
                 <label>來源類型<select aria-label="來源類型" value={sourceMode} onChange={(event) => { const value = event.target.value as "local" | "remote" | "iwisc"; setSourceMode(value); setRemoteDatasets([]); setRemoteDatasetId(""); setIwiscTasks([]); setIwiscTasksLoaded(false); setSelectedIwiscAntId(""); }}><option value="local">本機資料夾</option><option value="remote">遠端 Service</option><option value="iwisc">iWISC 任務</option></select></label>
                 {sourceMode === "local" ? <>
                   <label>資料夾路徑<input value={folderPath} onChange={(event) => setFolderPath(event.target.value)} placeholder="例如：D:\\datasets\\inspection" required /></label>
+                  {desktopHost && <button className="secondary-button" type="button" onClick={() => void choosePath("dataset")}>選擇影像資料夾…</button>}
                   <p className="field-help">圖片路徑只在本機服務中使用，不會傳送到外部伺服器。</p>
                   <label>資料集名稱<input value={datasetName} onChange={(event) => setDatasetName(event.target.value)} placeholder="留空時使用資料夾名稱" /></label>
                   <label className="checkbox-row"><input type="checkbox" checked={recursive} onChange={(event) => setRecursive(event.target.checked)} /><span>包含子資料夾</span></label>
@@ -731,11 +752,12 @@ export default function App() {
                   </section>
                   <section className="card inspector-card"><div className="inspector-title"><span className="inspector-icon violet">✦</span><div><h2>AI 預標注</h2><p>使用本機 YOLO 模型建議框選</p></div></div>
                     <label className="field-label">模型檔案路徑<input value={modelPath} onChange={(event) => setModelPath(event.target.value)} placeholder="選擇本機 .pt 模型" /></label>
+                    {desktopHost && <button className="secondary-button" type="button" onClick={() => void choosePath("model")}>選擇模型檔案…</button>}
                     <label className="field-label range-label">信心度 <strong>{confidence.toFixed(2)}</strong><input type="range" min="0" max="1" step="0.01" value={confidence} onChange={(event) => setConfidence(Number(event.target.value))} /></label>
                     <label className="checkbox-row small-check"><input type="checkbox" checked={overwritePredictions} onChange={(event) => setOverwritePredictions(event.target.checked)} /><span>覆寫現有標注</span></label>
                     <div className="prelabel-actions"><button className="secondary-button" onClick={() => void runPrelabel(selectedId ? [selectedId] : [])} disabled={!modelPath.trim() || !currentItem || busy} type="button">✦ 對此圖執行</button><button className="secondary-button" onClick={() => void runPrelabel()} disabled={!modelPath.trim() || busy} type="button">對資料集執行</button></div><span className="field-help">每批最多 500 張圖片。可調整信心度及覆寫現有標注。</span>
                   </section>
-                  <section className="card inspector-card settings-mini"><div className="inspector-title"><span className="inspector-icon mint">⚙</span><div><h2>標注設定</h2><p>{workspace?.labels.length ?? 0} 個框選類別</p></div></div><label className="field-label">外部標注工具<select value={tool} onChange={(event) => setTool(event.target.value)}><option value="x-anylabeling">X-AnyLabeling</option><option value="labelme">LabelMe</option><option value="isat">ISAT-SAM</option></select></label><label className="field-label">工具執行檔（選填）<input value={toolExecutable} onChange={(event) => setToolExecutable(event.target.value)} placeholder="工具未加入 PATH 時指定" /></label><button className="text-action" onClick={() => { setStage("data"); setPanel("labels"); }} type="button">管理標籤與分類 →</button></section>
+                  <section className="card inspector-card settings-mini"><div className="inspector-title"><span className="inspector-icon mint">⚙</span><div><h2>標注設定</h2><p>{workspace?.labels.length ?? 0} 個框選類別</p></div></div><label className="field-label">外部標注工具<select value={tool} onChange={(event) => setTool(event.target.value)}><option value="x-anylabeling">X-AnyLabeling</option><option value="labelme">LabelMe</option><option value="isat">ISAT-SAM</option></select></label><label className="field-label">工具執行檔（選填）<input value={toolExecutable} onChange={(event) => setToolExecutable(event.target.value)} placeholder="工具未加入 PATH 時指定" /></label>{desktopHost && <button className="secondary-button" type="button" onClick={() => void choosePath("tool")}>選擇工具執行檔…</button>}<button className="text-action" onClick={() => { setStage("data"); setPanel("labels"); }} type="button">管理標籤與分類 →</button></section>
                 </> : <section className="card inspector-card review-card"><div className="inspector-title"><span className="inspector-icon amber">✓</span><div><h2>審核決策</h2><p>檢視框選與分類後記錄結果</p></div></div>
                     <div className="review-stats"><div><small>待審查</small><strong>{pendingReviewCount}</strong></div><div><small>已核准</small><strong>{approvedCount}</strong></div><div><small>已退回</small><strong>{rejectedCount}</strong></div></div>
                     <label className="field-label">審核備註<textarea rows={4} value={reviewComment} onChange={(event) => setReviewComment(event.target.value)} placeholder="輸入需要修正的內容或審核說明…" /></label>
@@ -760,7 +782,7 @@ export default function App() {
               <section className="card format-card"><div className="section-title"><div><h2>輸出格式</h2><p>可同時選擇多種格式</p></div></div><div className="format-grid">{FORMATS.map(([id, title, description]) => <label className={`format-option ${exportFormats.includes(id) ? "selected" : ""}`} key={id}><input type="checkbox" checked={exportFormats.includes(id)} onChange={() => toggleFormat(id)} /><span className="format-check">✓</span><span className="format-copy"><strong>{title}</strong><small>{description}</small></span><span className="format-symbol">{id === "csv" ? "▤" : id === "imagefolder" ? "▧" : "{ }"}</span></label>)}</div>
                 <div className="split-settings"><label className="checkbox-row"><input type="checkbox" checked={enableSplit} onChange={(event) => setEnableSplit(event.target.checked)} /><span>啟用 Train / Val / Test 分割</span></label>{enableSplit && <div className="split-fields">{(["train", "val", "test"] as const).map((key) => <label key={key}>{key.toUpperCase()} (%)<input type="number" min="0" max="100" value={split[key]} onChange={(event) => setSplit((current) => ({ ...current, [key]: Number(event.target.value) }))} /></label>)}<label className="checkbox-row"><input type="checkbox" checked={split.stratified} onChange={(event) => setSplit((current) => ({ ...current, stratified: event.target.checked }))} /><span>依分類分層</span></label><small>目前合計：{split.train + split.val + split.test}%（匯出時會正規化）</small></div>}</div>
               </section>
-              <section className="card destination-card"><div className="section-title"><div><h2>輸出位置</h2><p>選擇本機資料夾，匯出檔案不會離開此裝置</p></div></div><label className="field-label">資料夾路徑<input value={exportDir} onChange={(event) => setExportDir(event.target.value)} placeholder="例如：D:\\exports\\inspection-v1" /></label><button className="primary-button export-button" onClick={() => void exportDataset()} disabled={busy || !manifestId}>檢查並開始匯出 <span>→</span></button></section>
+              <section className="card destination-card"><div className="section-title"><div><h2>輸出位置</h2><p>選擇本機資料夾，匯出檔案不會離開此裝置</p></div></div><label className="field-label">資料夾路徑<input value={exportDir} onChange={(event) => setExportDir(event.target.value)} placeholder="例如：D:\\exports\\inspection-v1" /></label>{desktopHost && <button className="secondary-button" type="button" onClick={() => void choosePath("export")}>選擇匯出資料夾…</button>}<button className="primary-button export-button" onClick={() => void exportDataset()} disabled={busy || !manifestId}>檢查並開始匯出 <span>→</span></button></section>
               {exportResult && <section className={`card export-result ${exportResult.mode === "done" ? "done" : "blocked"}`}><div className="section-title"><div><h2>{exportResult.mode === "done" ? "匯出完成" : "匯出檢查結果"}</h2><p>{exportResult.error ?? `${exportResult.annotated_items ?? 0} / ${exportResult.total_items ?? 0} 張圖片已處理`}</p></div><span>{exportResult.mode === "done" ? "✓" : "!"}</span></div>{exportResult.validation_issues?.length ? <div className="validation-list">{exportResult.validation_issues.slice(0, 30).map((issue, index) => <p className={`validation-issue ${issue.severity}`} key={`${issue.code}-${issue.item_id}-${index}`}><span>{issue.severity === "error" ? "×" : issue.severity === "warning" ? "!" : "i"}</span>{issue.message}</p>)}</div> : null}</section>}
             </div>
             <aside className="card export-aside"><span className="export-aside-icon">◈</span><p className="eyebrow">DATASET SUMMARY</p><h2>{currentManifest?.name}</h2><div className="summary-row"><span>影像總數</span><strong>{imageCount}</strong></div><div className="summary-row"><span>已標注影像</span><strong>{imageCount - (workspace?.pending ?? imageCount)}</strong></div><div className="summary-row"><span>已審核</span><strong>{approvedCount}</strong></div><div className="summary-row"><span>分類影像</span><strong>{allItems.filter((item) => item.has_classification).length}</strong></div><div className="aside-divider" /><h3>最近匯出</h3>{exportHistory.length ? exportHistory.slice(0, 5).map((item) => <div className="history-row" key={item.export_id}><span>▤</span><div><strong>{item.format}</strong><small>{item.item_count} 筆 · {item.created_at}</small></div></div>) : <p className="muted small">尚無匯出記錄</p>}</aside>

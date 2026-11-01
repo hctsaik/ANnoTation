@@ -46,9 +46,18 @@ service for local work.
 4. Confirm the review check, choose export formats and a local output directory,
    then run export validation and generation.
 
-The app is usable in a browser during development. A future desktop host can bundle
-the same React build and launch the local API as a sidecar; a native file-picker
-bridge is not part of this branch yet.
+The app is usable in a browser during development. The Tauri development host
+loads the same React source, starts the local Python API on a dynamic loopback
+port, passes that API base to React, and stops the service when the desktop
+process exits. Tauri's native dialogs supply paths for local image folders,
+export folders, YOLO model files, and optional external tools. Browser mode keeps
+its Vite proxy and direct path fields.
+
+The Tauri bundle remains disabled. The Python service is started from the source
+checkout with a Python 3.11 environment; a release still needs a reproducible
+Python runtime and dependency package, restart and failure-recovery behavior,
+and validation on each supported Windows architecture. The host bridge is a
+development integration slice, not packaged-app evidence.
 
 ## Migration acceptance
 
@@ -63,6 +72,7 @@ classification, review, COCO export, and service restart/readback through the re
 local API. Remote Service ingestion has a local HTTP integration test. The iWISC
 browser journey covers claim, annotation-sidecar persistence, local completion,
 read-only state, and the connector's unsupported delivery response through the
-real local API and a synthetic external HTTP service. Target-Service delivery, a
-native file-picker bridge, and packaged Windows architecture validation remain
-open.
+real local API and a synthetic external HTTP service. Target-Service delivery
+and packaged Windows architecture validation remain open. Native picker behavior
+is implemented in the development host; packaged host lifecycle remains
+unverified.
