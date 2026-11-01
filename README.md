@@ -73,7 +73,8 @@ py -m pytest tests/test_annotation_web_service.py -q
 
 The browser E2E suite includes a real local-folder → React → Python service
 journey. It uses a temporary nested image folder, creates and edits a rectangle,
-applies and clears image classification across image navigation, saves review
+preserves existing polygon sidecars during a React rectangle edit, applies and
+clears image classification across image navigation, saves review
 data including approval and rejection with comments, saves and restores the
 configured external tool, and checks COCO, YOLO, Pascal VOC, ImageFolder, and CSV
 exports with a 100/0/0 split. After restarting the service, it reads the

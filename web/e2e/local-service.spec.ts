@@ -387,6 +387,72 @@ test("previews label merge impact before the real service rewrites sidecars", as
   }
 });
 
+test("preserves existing polygons when React saves a rectangle edit", async ({ page }) => {
+  test.setTimeout(40_000);
+  await stopLocalService();
+  temporaryRoot = await mkdtemp(join(tmpdir(), "annotation-polygon-preserve-e2e-"));
+  temporaryRoots.push(temporaryRoot);
+  appDataDir = join(temporaryRoot, "app data");
+  sourceDir = join(temporaryRoot, "dataset");
+  await mkdir(sourceDir, { recursive: true });
+  await writeFile(join(sourceDir, "panel-a.png"), PNG_FIXTURE);
+  const polygons = [
+    { label: "dent", points: [[4, 4], [20, 4], [20, 20], [4, 20]], shape_type: "polygon", description: "preserve dent" },
+    { label: "stain", points: [[24, 26], [36, 26], [36, 40], [24, 40]], shape_type: "polygon", description: "preserve stain" },
+  ];
+  await writeFile(join(sourceDir, "panel-a.json"), JSON.stringify({
+    version: "2.4.0",
+    imagePath: "panel-a.png",
+    flags: {},
+    shapes: polygons.map((shape) => ({
+      ...shape,
+      group_id: null,
+      difficult: false,
+      flags: {},
+      attributes: {},
+    })),
+  }));
+
+  servicePort = await freeLoopbackPort();
+  serviceProcess = await startLocalService();
+  await page.goto(`http://127.0.0.1:${servicePort}`);
+  await expect(page.getByRole("navigation", { name: "工作流程" })).toBeVisible();
+  const workflow = page.getByRole("navigation", { name: "工作流程" });
+  await workflow.getByRole("button", { name: "資料集" }).click();
+  await page.getByLabel("資料夾路徑").fill(sourceDir);
+  await page.getByLabel("資料集名稱").fill("Polygon preservation");
+  await page.getByRole("button", { name: /建立資料集並開始標注/ }).click();
+  await expect(page.getByRole("button", { name: /panel-a\.png/ })).toBeVisible();
+
+  await workflow.getByRole("button", { name: "資料集" }).click();
+  await page.getByRole("button", { name: "標籤管理" }).click();
+  await page.getByLabel("框選標籤").fill("scratch\ndent\nstain");
+  await page.getByRole("button", { name: /保存工作區設定/ }).click();
+  await expect(page.getByText("工作區設定已保存")).toBeVisible();
+  await workflow.getByRole("button", { name: "標注工作台" }).click();
+  await page.getByRole("button", { name: /panel-a\.png/ }).click();
+
+  const canvas = page.getByLabel("圖片與標注框");
+  await expect(canvas).toBeVisible();
+  const bounds = await canvas.boundingBox();
+  expect(bounds).not.toBeNull();
+  if (!bounds) throw new Error("Annotation canvas has no visible bounds");
+  await page.mouse.move(bounds.x + bounds.width * 0.62, bounds.y + bounds.height * 0.12);
+  await page.mouse.down();
+  await page.mouse.move(bounds.x + bounds.width * 0.86, bounds.y + bounds.height * 0.40);
+  await page.mouse.up();
+  await expect(page.getByLabel("第 1 個框選類別")).toHaveValue("scratch");
+  await page.getByRole("button", { name: /保存標注/ }).click();
+  await expect(page.getByText("標注已保存")).toBeVisible();
+
+  const saved = JSON.parse(await readFile(join(sourceDir, "panel-a.json"), "utf8")) as {
+    shapes: Array<{ label: string; shape_type: string; points: number[][] }>;
+  };
+  expect(saved.shapes.map((shape) => shape.shape_type)).toEqual(["polygon", "polygon", "rectangle"]);
+  expect(saved.shapes.slice(0, 2).map(({ label, points }) => ({ label, points }))).toEqual(polygons.map(({ label, points }) => ({ label, points })));
+  expect(saved.shapes[2].label).toBe("scratch");
+});
+
 test.afterAll(async () => {
   await stopLocalService();
   for (const root of temporaryRoots) await rm(root, { recursive: true, force: true });
