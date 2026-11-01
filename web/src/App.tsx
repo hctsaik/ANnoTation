@@ -64,6 +64,8 @@ export default function App() {
   const [newIwiscUrl, setNewIwiscUrl] = useState("");
   const [newIwiscFormat, setNewIwiscFormat] = useState("coco");
   const [newIwiscToken, setNewIwiscToken] = useState("");
+  const [newIwiscResultPath, setNewIwiscResultPath] = useState("");
+  const [newIwiscResultMethod, setNewIwiscResultMethod] = useState("POST");
   const [iwiscWorkerId, setIwiscWorkerId] = useState("");
   const [selectedId, setSelectedId] = useState("");
   const [canvasRevision, setCanvasRevision] = useState(0);
@@ -409,6 +411,8 @@ export default function App() {
         server_host_name: newIwiscUrl,
         target_format: newIwiscFormat,
         api_token: newIwiscToken,
+        result_path: newIwiscResultPath,
+        result_method: newIwiscResultMethod,
       });
       setIwiscTenants((current) => [...current.filter((item) => item.tenant_id !== tenant.tenant_id), tenant]);
       setIwiscTenantId(tenant.tenant_id);
@@ -417,6 +421,8 @@ export default function App() {
       setNewIwiscName("");
       setNewIwiscUrl("");
       setNewIwiscToken("");
+      setNewIwiscResultPath("");
+      setNewIwiscResultMethod("POST");
       setNotice(`已新增外部系統連線：${tenant.system_name}`);
     } catch (reason) {
       setError(shortError(reason));
@@ -683,7 +689,7 @@ export default function App() {
                     <label className="checkbox-row"><input type="checkbox" checked={overwriteRemote} onChange={(event) => setOverwriteRemote(event.target.checked)} /><span>重新下載（覆蓋現有）</span></label>
                   </>}
                 </> : <>
-                  <label>外部系統<select aria-label="外部系統" value={iwiscTenantId} onChange={(event) => { setIwiscTenantId(event.target.value); setIwiscTasks([]); setIwiscTasksLoaded(false); setSelectedIwiscAntId(""); }}>{iwiscTenants.map((tenant) => <option key={tenant.tenant_id} value={tenant.tenant_id}>{tenant.system_name} · {tenant.target_format}{tenant.has_api_token ? " · 已設定金鑰" : ""}</option>)}</select></label>
+                  <label>外部系統<select aria-label="外部系統" value={iwiscTenantId} onChange={(event) => { setIwiscTenantId(event.target.value); setIwiscTasks([]); setIwiscTasksLoaded(false); setSelectedIwiscAntId(""); }}>{iwiscTenants.map((tenant) => <option key={tenant.tenant_id} value={tenant.tenant_id}>{tenant.system_name} · {tenant.target_format}{tenant.has_api_token ? " · 已設定金鑰" : ""}{tenant.result_delivery_configured ? " · 已設定結果回傳" : ""}</option>)}</select></label>
                   {iwiscTenants.length === 0 && <p className="field-help">尚無連線。請在下方新增外部系統設定。</p>}
                   <label>您的使用者 ID（工號）<input aria-label="使用者 ID" value={iwiscUserId} onChange={(event) => setIwiscUserId(event.target.value)} placeholder="user001" /></label>
                   <button className="secondary-button" type="button" onClick={() => void loadIwiscTasks()} disabled={busy || !iwiscTenantId || !iwiscUserId.trim()}>查看任務清單</button>
@@ -705,8 +711,10 @@ export default function App() {
                     <label>Service 位址<input aria-label="iWISC Service 位址" type="url" value={newIwiscUrl} onChange={(event) => setNewIwiscUrl(event.target.value)} placeholder="http://aoi-server:8080" /></label>
                     <label>標注結果格式<select aria-label="標注結果格式" value={newIwiscFormat} onChange={(event) => setNewIwiscFormat(event.target.value)}><option value="coco">COCO</option><option value="yolo-detection">YOLO detection</option><option value="labelme">LabelMe</option><option value="isat">ISAT</option></select></label>
                     <label>API 金鑰（可留空）<input aria-label="iWISC API 金鑰" type="password" autoComplete="new-password" value={newIwiscToken} onChange={(event) => setNewIwiscToken(event.target.value)} placeholder="由 IT 提供" /></label>
+                    <label>結果回傳路徑（選填）<input aria-label="iWISC 結果回傳路徑" value={newIwiscResultPath} onChange={(event) => setNewIwiscResultPath(event.target.value)} placeholder="/tasks/{ant_id}/results" /></label>
+                    {newIwiscResultPath.trim() && <label>回傳 HTTP 方法<select aria-label="iWISC 回傳 HTTP 方法" value={newIwiscResultMethod} onChange={(event) => setNewIwiscResultMethod(event.target.value)}><option value="POST">POST</option><option value="PUT">PUT</option><option value="PATCH">PATCH</option></select></label>}
                     <button className="secondary-button" type="button" onClick={() => void registerIwiscTenant()} disabled={busy || !newIwiscName.trim() || !newIwiscUrl.trim()}>新增連線</button>
-                    <p className="field-help">金鑰只送到本機 API，並儲存在本機工作區的連線設定中。</p>
+                    <p className="field-help">金鑰只送到本機 API，並儲存在本機工作區。設定回傳路徑後，完成任務會以 JSON 傳送 ant_id、task_id、annotation_json、new_classification 和 annotated_by；路徑可用 {'{ant_id}'}、{'{task_id}'}。請依外部 Service 的 API 規格設定，未設定時只會在本機完成。</p>
                   </details>
                 </>}
                 <button className="primary-button" type="submit" disabled={busy || (sourceMode === "local" ? !folderPath.trim() : sourceMode === "remote" ? !remoteServiceUrl.trim() || !remoteDatasetId : !iwiscTenantId || !iwiscUserId.trim() || !selectedIwiscAntId)}>{sourceMode === "local" ? "建立資料集並開始標注" : sourceMode === "remote" ? "下載資料集並開始標注" : "認領任務並載入影像"} <span>→</span></button>

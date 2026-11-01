@@ -20,6 +20,7 @@ export type IwiscTenant = {
   server_host_name: string;
   target_format: string;
   has_api_token: boolean;
+  result_delivery_configured?: boolean;
 };
 
 export type IwiscTask = {

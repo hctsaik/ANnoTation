@@ -264,12 +264,15 @@ describe("ANnoTation workflow shell", () => {
     fireEvent.change(screen.getByLabelText("連線別名"), { target: { value: "AOI Line 2" } });
     fireEvent.change(screen.getByLabelText("iWISC Service 位址"), { target: { value: "https://aoi-2.internal" } });
     fireEvent.change(screen.getByLabelText("iWISC API 金鑰"), { target: { value: "secret-value" } });
+    fireEvent.change(screen.getByLabelText("iWISC 結果回傳路徑"), { target: { value: "/tasks/{ant_id}/results" } });
     fireEvent.click(screen.getByRole("button", { name: "新增連線" }));
     await waitFor(() => expect(mocks.api.registerIwiscTenant).toHaveBeenCalledWith({
       system_name: "AOI Line 2",
       server_host_name: "https://aoi-2.internal",
       target_format: "coco",
       api_token: "secret-value",
+      result_path: "/tasks/{ant_id}/results",
+      result_method: "POST",
     }));
     expect(document.body.textContent).not.toContain("secret-value");
   });

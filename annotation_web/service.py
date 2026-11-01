@@ -17,6 +17,7 @@ from uuid import uuid4
 
 from annotation_runtime import data_root
 from annotation_runtime import _manifest_db as manifest_db
+from domain.integrations.configuration import normalize_result_delivery_config
 
 
 IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff")
@@ -270,12 +271,16 @@ class AnnotationService:
 
     @staticmethod
     def _public_iwisc_tenant(row: dict[str, Any]) -> dict[str, Any]:
+        connector_config = row.get("connector_config")
         return {
             "tenant_id": str(row.get("tenant_id") or ""),
             "system_name": str(row.get("system_name") or ""),
             "server_host_name": str(row.get("server_host_name") or ""),
             "target_format": str(row.get("target_format") or ""),
             "has_api_token": bool(row.get("api_token")),
+            "result_delivery_configured": bool(
+                isinstance(connector_config, dict) and connector_config.get("result_path")
+            ),
         }
 
     def iwisc_tenants(self) -> list[dict[str, Any]]:
@@ -292,6 +297,12 @@ class AnnotationService:
         server_host_name = self._remote_service_url(params.get("server_host_name"))
         target_format = str(params.get("target_format") or "coco").strip().lower()
         api_token = str(params.get("api_token") or "").strip()
+        try:
+            delivery_config = normalize_result_delivery_config(
+                params.get("result_path"), params.get("result_method", "POST")
+            )
+        except ValueError as exc:
+            raise ServiceError(400, str(exc)) from exc
         if not system_name or len(system_name) > 120:
             raise ServiceError(400, "Enter a connection name (up to 120 characters)")
         if target_format not in {"coco", "yolo-detection", "labelme", "isat"}:
@@ -304,6 +315,8 @@ class AnnotationService:
                 server_host_name=server_host_name,
                 target_format=target_format,
                 api_token=api_token or None,
+                connector_type="rest",
+                connector_config=delivery_config,
             )
         except ServiceError:
             raise

@@ -23,6 +23,12 @@ let serviceProcess: ChildProcess | undefined;
 let externalServer: Server | undefined;
 let externalPort = 0;
 const externalRequests: string[] = [];
+const externalDeliveries: Array<{
+  method: string;
+  path: string;
+  authorization: string | undefined;
+  body: Record<string, unknown>;
+}> = [];
 let serviceLogs = "";
 
 async function freeLoopbackPort(): Promise<number> {
@@ -112,6 +118,22 @@ async function startSyntheticIwisc(): Promise<void> {
       response.end("{}");
       return;
     }
+    if (request.method === "POST" && path === "/tasks/ant-e2e-01/results") {
+      let body = "";
+      request.setEncoding("utf8");
+      request.on("data", (chunk: string) => { body += chunk; });
+      request.on("end", () => {
+        externalDeliveries.push({
+          method: request.method ?? "",
+          path,
+          authorization: request.headers.authorization,
+          body: JSON.parse(body) as Record<string, unknown>,
+        });
+        response.writeHead(202, { "Content-Type": "application/json" });
+        response.end("{\"accepted\":true}");
+      });
+      return;
+    }
     if (request.method === "GET" && path === "/artifact.zip") {
       response.writeHead(200, { "Content-Type": "application/zip" });
       response.end(TASK_ARCHIVE);
@@ -143,6 +165,7 @@ test("registers an iWISC service, lists tasks, claims one, and opens its local i
   await page.getByLabel("連線別名").fill("Synthetic AOI");
   await page.getByLabel("iWISC Service 位址").fill(`http://127.0.0.1:${externalPort}`);
   await page.getByLabel("iWISC API 金鑰").fill("synthetic-secret");
+  await page.getByLabel("iWISC 結果回傳路徑").fill("/tasks/{ant_id}/results");
   await page.getByRole("button", { name: "新增連線" }).click();
   await expect(page.getByText("已新增外部系統連線：Synthetic AOI")).toBeVisible();
   await expect(page.getByLabel("iWISC API 金鑰")).toHaveValue("");
@@ -170,13 +193,26 @@ test("registers an iWISC service, lists tasks, claims one, and opens its local i
 
   await page.getByLabel("完成任務作業員工號").fill("worker-e2e");
   await page.getByRole("button", { name: /保存並完成任務/ }).click();
-  await expect(page.getByRole("region", { name: "iWISC 任務狀態" }).getByText(/外部結果回傳尚未支援/)).toBeVisible();
+  await expect(page.getByRole("region", { name: "iWISC 任務狀態" }).getByText(/回傳狀態：ok/)).toBeVisible();
+  await expect(page.getByText("iWISC 任務已完成，外部系統已回應成功。")).toBeVisible();
   await expect(page.getByText("此外部任務已完成，標注內容為唯讀。")).toBeVisible();
   await expect(page.getByRole("button", { name: /保存標注/ })).toBeDisabled();
   expect(externalRequests).toContain("GET /getAntList");
   expect(externalRequests).toContain("POST /getAntTaskDetail");
   expect(externalRequests).toContain("PATCH /tasks/ant-e2e-01/claim");
   expect(externalRequests).toContain("GET /artifact.zip");
+  expect(externalRequests).toContain("POST /tasks/ant-e2e-01/results");
+  expect(externalDeliveries).toHaveLength(1);
+  expect(externalDeliveries[0].authorization).toBe("Bearer synthetic-secret");
+  expect(externalDeliveries[0].body).toMatchObject({
+    ant_id: "ant-e2e-01",
+    annotated_by: "worker-e2e",
+    new_classification: null,
+  });
+  const annotationJson = externalDeliveries[0].body.annotation_json as {
+    react_sidecars: { items: Record<string, { annotation: { shapes: unknown[] } }> };
+  };
+  expect(Object.values(annotationJson.react_sidecars.items)[0].annotation.shapes).toHaveLength(1);
 });
 
 test.afterAll(async () => {

@@ -99,6 +99,35 @@ def test_local_dataset_image_and_annotation_round_trip(service_and_dataset):
     assert deleted["labels"]["label_map"] == {}
 
 
+def test_iwisc_result_delivery_registration_is_opt_in_and_redacted(service_and_dataset):
+    service, _source, _created = service_and_dataset
+    connection = service.register_iwisc_tenant({
+        "system_name": "Configured result endpoint",
+        "server_host_name": "https://tasks.example",
+        "target_format": "coco",
+        "api_token": "private-token",
+        "result_path": "/tasks/{ant_id}/results/{task_id}",
+        "result_method": "patch",
+    })
+
+    assert connection["result_delivery_configured"] is True
+    assert "private-token" not in json.dumps(connection)
+    stored = service._iwisc_domain_service().get_tenant(connection["tenant_id"])
+    assert stored["connector_config"] == {
+        "result_path": "/tasks/{ant_id}/results/{task_id}",
+        "result_method": "PATCH",
+    }
+
+    with pytest.raises(ServiceError) as error:
+        service.register_iwisc_tenant({
+            "system_name": "Invalid result endpoint",
+            "server_host_name": "https://tasks.example",
+            "target_format": "coco",
+            "result_path": "https://other.example/submit",
+        })
+    assert error.value.status == 400
+
+
 def test_classification_and_review_round_trip(service_and_dataset):
     service, _source, created = service_and_dataset
     item_id = manifest_db.get_manifest_items(service.db_path, created["manifest_id"])[0]["item_id"]

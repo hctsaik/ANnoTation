@@ -28,6 +28,7 @@ mapping are pure functions (`resolve_paths`, `map_list_item`) for unit testing.
 from __future__ import annotations
 
 import time
+from urllib.parse import quote
 
 import httpx
 
@@ -38,12 +39,15 @@ from domain.integrations.contracts import (
     ExternalTaskDetail as TaskDetailResponse,
 )
 from domain.core.models import SystemTenant
+from domain.integrations.configuration import normalize_result_delivery_config
 
 # Built-in iWISC contract — the defaults a mapping overrides.
 _DEFAULTS = {
     "list_path": "/getAntList",
     "detail_path": "/getAntTaskDetail",
     "claim_path": "/tasks/{ant_id}/claim",
+    "result_path": "",
+    "result_method": "POST",
     "detail_method": "POST",
     "list_root": "",   # dot-path to the array inside an envelope (e.g. "data.items"); "" = response is the array
     "detail_root": "", # dot-path to the object inside a detail envelope (e.g. "data"); "" = response is the object
@@ -65,6 +69,13 @@ def resolve_paths(mapping: dict | None) -> dict:
                 m[k] = mapping[k]
         if isinstance(mapping.get("fields"), dict):
             m["fields"] = {**_DEFAULTS["fields"], **mapping["fields"]}
+        if mapping.get("result_path"):
+            result = normalize_result_delivery_config(
+                mapping.get("result_path"), mapping.get("result_method", "POST")
+            )
+            if result is None:
+                raise ValueError("Result endpoint path is required")
+            m.update(result)
     return m
 
 
@@ -199,6 +210,38 @@ class ConfigurableRestConnector(ExternalSystemConnector):
             raise RuntimeError(f"外部系統找不到任務 {ant_id!r}（404）")
         if resp.status_code != 200:
             raise RuntimeError(f"PATCH {url} 回傳非預期狀態碼 {resp.status_code}：{resp.text[:200]}")
+
+    def deliver_result(
+        self,
+        ant_id: str,
+        platform_task_id: str,
+        annotation_json: dict,
+        new_classification: str | None,
+        annotated_by: str | None,
+    ) -> dict:
+        """Send a JSON result only when an endpoint is explicitly configured."""
+        result_path = self._m.get("result_path") or ""
+        if not result_path:
+            return super().deliver_result(
+                ant_id, platform_task_id, annotation_json, new_classification, annotated_by
+            )
+        url_path = result_path.replace("{ant_id}", quote(str(ant_id), safe=""))
+        url_path = url_path.replace("{task_id}", quote(str(platform_task_id), safe=""))
+        url = self._url(url_path)
+        payload = {
+            "ant_id": ant_id,
+            "task_id": platform_task_id,
+            "annotation_json": annotation_json,
+            "new_classification": new_classification,
+            "annotated_by": annotated_by,
+        }
+        method = self._m.get("result_method", "POST")
+        response = httpx.request(
+            method, url, json=payload, headers=self._headers, timeout=self._timeout
+        )
+        if not 200 <= response.status_code < 300:
+            raise RuntimeError(f"Result delivery returned HTTP {response.status_code}")
+        return {"status": "ok", "ant_id": ant_id, "http_status": response.status_code}
 
     def health_check(self) -> ConnectorHealth:
         url = self._url(self._m["list_path"])

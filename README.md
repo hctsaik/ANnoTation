@@ -9,11 +9,12 @@ runtime.
 **Migration status:** local-folder and remote Service ingestion, synthetic HTTP
 iWISC task listing and claim, the rectangle Canvas workflow, classification,
 review, a COCO export path, and a confirmed label-merge impact preview are
-implemented. The iWISC path also saves React sidecars into the local task record and
-supports local task completion; the current
-REST connector reports external result delivery as unsupported. The local workflow
-has a synthetic real-service browser journey, and iWISC has a separate browser-to-
-service journey against a local HTTP fixture. This branch is not release-complete:
+implemented. The iWISC path saves React sidecars into the local task record and
+supports local task completion. A connection can opt into JSON result delivery by
+configuring its relative API path and method; without a path, external delivery
+remains unsupported. The local workflow has a synthetic real-service browser
+journey, and iWISC has a separate browser-to-service journey against a local HTTP
+fixture. This branch is not release-complete:
 see the
 [migration acceptance matrix](docs/react-migration-test-cases.md) for pending
 source modes, packaged desktop integration, and remaining end-to-end coverage.
@@ -97,8 +98,9 @@ Windows output path is reported as a failed attempt without replacing that
 history. The API is not mocked for this case, and the source image hash is
 checked for changes. A second browser journey registers a synthetic iWISC
 HTTP service, lists and claims a task, downloads its ZIP, opens the image, saves
-annotation sidecars, completes the local task, and verifies the unsupported
-external-delivery state and read-only editor. Build `web/dist` before running the
+annotation sidecars, delivers the configured JSON result, and verifies the
+read-only editor. Python tests also verify the unconfigured unsupported state.
+Build `web/dist` before running the
 suite. On Windows the tests start the
 service with `py -3.14`; set `ANNOTATION_PYTHON` to another executable when needed.
 
