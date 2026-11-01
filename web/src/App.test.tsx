@@ -224,6 +224,88 @@ describe("ANnoTation workflow shell", () => {
     expect(screen.getByRole("button", { name: /panel-b\.png/ })).toBeInTheDocument();
   });
 
+  it("paginates at twenty items and combines filters after returning to the first page", async () => {
+    const items = Array.from({ length: 21 }, (_, index) => {
+      const even = index % 2 === 0;
+      return {
+        item_id: `page-${index}`,
+        name: `panel-${String(index).padStart(2, "0")}.png`,
+        image_url: "image",
+        width: 40,
+        height: 30,
+        has_annotation: even,
+        has_bbox: even,
+        has_classification: even,
+        classification: even ? "NG" : "OK",
+        shape_count: even ? 1 : 0,
+        labels: even ? ["scratch"] : [],
+        max_conf: index === 20 ? 0.25 : 0.9,
+        review_status: "pending" as const,
+      };
+    });
+    mocks.api.workspace.mockResolvedValue({ ...workspace, total: items.length, items });
+
+    render(<App />);
+    expect(await screen.findByRole("button", { name: /panel-00\.png/ })).toBeInTheDocument();
+    expect(screen.getByText("21 張符合條件")).toBeInTheDocument();
+    expect(screen.getByText("1 / 2")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /panel-19\.png/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /panel-20\.png/ })).not.toBeInTheDocument();
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "下一頁" }));
+    expect(screen.getByText("2 / 2")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /panel-20\.png/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "下一頁" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "上一頁" })).toBeEnabled();
+
+    fireEvent.change(screen.getByPlaceholderText("搜尋影像名稱…"), { target: { value: "panel-20" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "影像篩選" }), { target: { value: "annotated" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "分類篩選" }), { target: { value: "NG" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "AI 信心度" }), { target: { value: "low" } });
+    expect(screen.getByText("1 張符合條件")).toBeInTheDocument();
+    expect(screen.getByText("1 / 1")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /panel-20\.png/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "清除" }));
+    expect(screen.getByText("21 張符合條件")).toBeInTheDocument();
+    expect(screen.getByText("1 / 2")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /panel-00\.png/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /panel-20\.png/ })).not.toBeInTheDocument();
+  });
+
+  it("filters the review queue by review state and annotation label", async () => {
+    const items = [
+      { ...itemA, review_status: "approved" as const, labels: ["scratch"] },
+      { ...itemB, review_status: "rejected" as const, labels: ["dent"] },
+      { ...itemB, item_id: "img-c", name: "panel-c.png", review_status: "approved" as const, labels: ["dent"] },
+    ];
+    mocks.api.workspace.mockResolvedValue({ ...workspace, total: items.length, items, labels: ["scratch", "dent"] });
+
+    render(<App />);
+    await screen.findByRole("button", { name: /panel-a\.png/ });
+    const workflow = within(screen.getByRole("navigation", { name: "工作流程" }));
+    await userEvent.setup().click(workflow.getByRole("button", { name: /審核$/ }));
+    expect(await screen.findByRole("heading", { name: "審核決策" })).toBeInTheDocument();
+
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByRole("combobox", { name: "影像篩選" }), "approved");
+    expect(screen.getByRole("button", { name: /panel-a\.png/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /panel-c\.png/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /panel-b\.png/ })).not.toBeInTheDocument();
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "標籤篩選" }), "dent");
+    expect(screen.getByText("1 張符合條件")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /panel-c\.png/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /panel-a\.png/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "清除" }));
+    expect(screen.getByText("3 張符合條件")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /panel-a\.png/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /panel-b\.png/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /panel-c\.png/ })).toBeInTheDocument();
+  });
+
   it("filters by classification and saves image-level classification changes", async () => {
     render(<App />);
     await screen.findByRole("button", { name: /panel-a\.png/ });
