@@ -11,19 +11,20 @@ The React branch has a working local-folder workflow and a first Canvas editor.
 legacy scenario has passed end-to-end. Release parity remains open while a row is
 partial or pending.
 
-Local validation for this branch: 11 Vitest tests, 4 Playwright tests, and 4
-Python service/API tests pass; the production Vite build succeeds and `npm audit`
-reports no vulnerabilities. Windows ARM64, packaged-host, and real-model checks
-remain pending.
+Local validation for this branch: 11 Vitest tests, 5 Playwright tests (including
+a real local-folder → React → Python service save/restart/readback journey), and
+4 Python service/API tests pass; the production Vite build succeeds and `npm
+audit` reports no vulnerabilities. Windows ARM64, packaged-host, and real-model
+checks remain pending.
 
 | ID | Existing behavior to preserve | React implementation | Evidence and remaining work | Status |
 |---|---|---|---|---|
 | APP-01 | Restore an existing dataset and keep the four workflow stages available | Last-used manifest is prioritized; four workflow stages remain available | React unit test and Playwright workflow case pass locally | Implemented; CI run pending |
-| DATA-01 | Create a dataset from a local folder, scan recursively, and accept supported image extensions | Local folder source calls module 026 and stores a manifest | Python service tests use a synthetic image; browser import uses a mocked API | Implemented; real-folder browser-to-service E2E pending |
+| DATA-01 | Create a dataset from a local folder, scan recursively, and accept supported image extensions | Local folder source calls module 026 and stores a manifest | `web/e2e/local-service.spec.ts` creates a dataset from a real temporary folder containing root and nested images through the built React app and Python service; service tests cover image and annotation round trips | Implemented; real-folder and recursive browser-to-service path passes; format matrix and CI evidence pending |
 | DATA-02 | Ingest remote and iWISC task sources | No React API path yet | Port supported source adapters and verify offline/error/restart behavior | Pending |
 | SET-01 | Configure annotation labels, classification labels, and the external tool | React settings call the module 012 process layer | Add save/reopen tests for each setting and tool override | Implemented; persistence test pending |
 | LIST-01 | Search names, filter annotation/classification/review state, clear filters, and paginate | React list supports search, status, classification, low-confidence, label filters, and 20-item pages | Model/App tests and Playwright filter case pass; page-boundary and combined-filter cases remain | Implemented; coverage partial |
-| WORK-01 | Draw, move, resize, delete, undo, and redo rectangle annotations; navigate between images | React Canvas supports drag drawing, moving, lower-right resizing, deletion, undo/redo, and image navigation | Canvas unit tests plus Playwright draw/save/switch/reopen against a mocked API pass; integrated API E2E remains | Implemented; integration pending |
+| WORK-01 | Draw, move, resize, delete, undo, and redo rectangle annotations; navigate between images | React Canvas supports drag drawing, moving, lower-right resizing, deletion, undo/redo, and image navigation | Canvas unit tests and mocked workflow E2E pass; `web/e2e/local-service.spec.ts` draws and saves through the real API, switches images, restarts the service, and verifies the sidecar-backed annotation is read back | Implemented; core rectangle integration passes; move/resize/delete/undo/redo against the real service and CI evidence remain |
 | WORK-02 | Preserve existing polygons and other non-rectangle X-AnyLabeling shapes during rectangle edits | React conversion keeps non-rectangle shapes and their relative order | Model test and Python annotation round-trip test cover polygon preservation | Implemented; representative user-file fixture pending |
 | WORK-03 | Apply and clear image-level classification with keyboard/quick actions | React classification control saves changes immediately | App test verifies classification filtering and setting a classification; add clear/next-image persistence cases | Implemented; coverage partial |
 | TOOL-01 | Launch X-AnyLabeling, LabelMe, or ISAT for the selected image | Local API uses the existing adapter registry and accepts an optional executable path | Add adapter/API tests; verify launch on supported Windows architectures | Implemented; runtime verification pending |

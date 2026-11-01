@@ -64,6 +64,13 @@ py -m pip install pytest
 py -m pytest tests/test_annotation_web_service.py -q
 ```
 
+The browser E2E suite includes a real local-folder → React → Python service
+journey. It uses a temporary nested image folder, saves a rectangle annotation,
+restarts the service, and checks that the annotation reads back from its sidecar;
+the API is not mocked for this case. Build `web/dist` before running it. On
+Windows the test starts the service with `py -3.14`; set `ANNOTATION_PYTHON` to
+the Python executable when using another interpreter.
+
 ## Architecture and project context
 
 - [Workspace architecture](docs/annotation-workspace-architecture.md)
