@@ -122,17 +122,66 @@ test("uses a real local folder and Python service, then reads saved annotations 
   await page.mouse.move(bounds.x + bounds.width * 0.8, bounds.y + bounds.height * 0.8);
   await page.mouse.up();
   await expect(page.getByLabel("第 1 個框選類別")).toBeVisible();
+  const sidecarPath = join(sourceDir, "panel-a.json");
+  await page.getByRole("button", { name: /保存標注/ }).click();
+  await expect(page.getByText("已同步")).toBeVisible();
+  const initialAnnotation = JSON.parse(await readFile(sidecarPath, "utf8")) as { shapes: Array<{ points: number[][] }> };
+  const initialPoints = initialAnnotation.shapes[0].points;
+
+  const selectTool = page.getByRole("group", { name: "標注工具" }).getByRole("button", { name: /選取/ });
+  await selectTool.click();
+  const canvasMetrics = await canvas.evaluate((element: HTMLCanvasElement) => {
+    const rect = element.getBoundingClientRect();
+    return { x: rect.x, y: rect.y, width: rect.width, height: rect.height, bitmapWidth: element.width, bitmapHeight: element.height };
+  });
+  const moveX = canvasMetrics.width * 0.04;
+  const moveY = canvasMetrics.height * 0.04;
+  await page.mouse.move(bounds.x + bounds.width * 0.5, bounds.y + bounds.height * 0.5);
+  await page.mouse.down();
+  await page.mouse.move(bounds.x + bounds.width * 0.5 + moveX, bounds.y + bounds.height * 0.5 + moveY);
+  await page.mouse.up();
+  const beforeResize = await page.locator(".box-coordinates").innerText();
+
+  const resizedBounds = await canvas.boundingBox();
+  expect(resizedBounds).not.toBeNull();
+  if (!resizedBounds) throw new Error("Annotation canvas has no visible bounds after moving a rectangle");
+  await page.mouse.move(resizedBounds.x + resizedBounds.width * 0.84, resizedBounds.y + resizedBounds.height * 0.84);
+  await page.mouse.down();
+  await page.mouse.move(resizedBounds.x + resizedBounds.width * 0.90, resizedBounds.y + resizedBounds.height * 0.90);
+  await page.mouse.up();
+  const afterResize = await page.locator(".box-coordinates").innerText();
+  expect(afterResize).not.toBe(beforeResize);
+  await page.getByRole("button", { name: "↶ 復原" }).click();
+  await expect(page.locator(".box-coordinates")).toHaveText(beforeResize);
+  await page.getByRole("button", { name: "↷ 重做" }).click();
+  await expect(page.locator(".box-coordinates")).toHaveText(afterResize);
+
+  await page.getByRole("button", { name: "刪除第 1 個框選" }).click();
+  await expect(page.getByLabel("第 1 個框選類別")).toHaveCount(0);
+  await page.getByRole("button", { name: "↶ 復原" }).click();
+  await expect(page.getByLabel("第 1 個框選類別")).toBeVisible();
+  await page.getByRole("button", { name: "↷ 重做" }).click();
+  await expect(page.getByLabel("第 1 個框選類別")).toHaveCount(0);
+  await page.getByRole("button", { name: "↶ 復原" }).click();
+  await expect(page.getByLabel("第 1 個框選類別")).toBeVisible();
+
   await page.getByRole("button", { name: /保存標注/ }).click();
   await expect(page.getByText("已同步")).toBeVisible();
 
   await page.getByRole("button", { name: /panel-b\.png/ }).click();
   await page.getByRole("button", { name: /panel-a\.png/ }).click();
   await expect(page.getByLabel("第 1 個框選類別")).toBeVisible();
-  const sidecarPath = join(sourceDir, "panel-a.json");
   const savedAnnotation = JSON.parse(await readFile(sidecarPath, "utf8")) as { shapes: Array<{ shape_type: string; points: number[][] }> };
   expect(savedAnnotation.shapes).toHaveLength(1);
   expect(savedAnnotation.shapes[0].shape_type).toBe("rectangle");
   expect(savedAnnotation.shapes[0].points).toHaveLength(2);
+  expect(savedAnnotation.shapes[0].points[0][0]).toBeGreaterThan(0);
+  expect(savedAnnotation.shapes[0].points[0][0]).toBeGreaterThan(initialPoints[0][0]);
+  expect(savedAnnotation.shapes[0].points[0][1]).toBeGreaterThan(initialPoints[0][1]);
+  expect(savedAnnotation.shapes[0].points[1][0]).toBeGreaterThan(savedAnnotation.shapes[0].points[0][0]);
+  expect(savedAnnotation.shapes[0].points[1][1]).toBeGreaterThan(savedAnnotation.shapes[0].points[0][1]);
+  expect(savedAnnotation.shapes[0].points[1][0]).toBeGreaterThan(initialPoints[1][0]);
+  expect(savedAnnotation.shapes[0].points[1][1]).toBeGreaterThan(initialPoints[1][1]);
   expect(createHash("sha256").update(await readFile(join(sourceDir, "panel-a.png"))).digest("hex")).toBe(originalImageHash);
 
   await stopLocalService();
