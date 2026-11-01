@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
     createDataset: vi.fn(),
     review: vi.fn(),
     saveClassification: vi.fn(),
+    prelabel: vi.fn(),
     export: vi.fn(),
     labels: vi.fn(),
     labelAction: vi.fn(),
@@ -58,6 +59,7 @@ describe("ANnoTation workflow shell", () => {
     mocks.api.completeIwiscTask.mockResolvedValue({ task: { task_id: "task-1", ant_id: "ant-01", ant_active: 2, annotated_by: "worker-9", delivery_status: "unsupported" }, delivery: { status: "unsupported", error: false } });
     mocks.api.review.mockResolvedValue({ status: "approved" });
     mocks.api.saveClassification.mockResolvedValue({ classification: "OK" });
+    mocks.api.prelabel.mockResolvedValue({ ok: 1, skipped: 0, errors: 0, detected: 2 });
     mocks.api.export.mockResolvedValue({ mode: "done", total_items: 2, annotated_items: 1 });
     mocks.api.labels.mockResolvedValue({
       manifest_id: "demo",
@@ -119,6 +121,62 @@ describe("ANnoTation workflow shell", () => {
     fireEvent.click(stages.getByRole("button", { name: /匯出/ }));
     fireEvent.click(screen.getByRole("button", { name: "選擇匯出資料夾…" }));
     await waitFor(() => expect(screen.getByRole("textbox", { name: "資料夾路徑" })).toHaveValue("D:\\exports\\inspection"));
+  });
+
+  it("runs dataset pre-labeling in 500-image batches and aggregates the results", async () => {
+    const items = [
+      itemA,
+      ...Array.from({ length: 500 }, (_, index) => ({
+        ...itemB,
+        item_id: `img-${index}`,
+        name: `panel-${index}.png`,
+      })),
+    ];
+    mocks.api.workspace.mockResolvedValue({ ...workspace, total: items.length, items });
+    mocks.api.prelabel
+      .mockResolvedValueOnce({ ok: 500, skipped: 0, errors: 0, detected: 42 })
+      .mockResolvedValueOnce({ ok: 1, skipped: 0, errors: 0, detected: 3 });
+    render(<App />);
+    await screen.findByRole("heading", { name: "標注工作台" });
+    fireEvent.change(screen.getByPlaceholderText("選擇本機 .pt 模型"), {
+      target: { value: "D:\\models\\yolo.pt" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "對資料集執行" }));
+
+    await waitFor(() => expect(mocks.api.prelabel).toHaveBeenCalledTimes(2));
+    const first = mocks.api.prelabel.mock.calls[0][1] as { item_ids: string[] };
+    const second = mocks.api.prelabel.mock.calls[1][1] as { item_ids: string[] };
+    expect(first.item_ids).toHaveLength(500);
+    expect(second.item_ids).toHaveLength(1);
+    expect([...first.item_ids, ...second.item_ids]).toEqual(items.map((item) => item.item_id));
+    expect(await screen.findByText(/AI 預標注完成：501 張、45 個框/)).toBeInTheDocument();
+  });
+
+  it("reports completed batches and refreshes saved work if a later pre-label batch fails", async () => {
+    const items = [
+      itemA,
+      ...Array.from({ length: 500 }, (_, index) => ({
+        ...itemB,
+        item_id: `img-${index}`,
+        name: `panel-${index}.png`,
+      })),
+    ];
+    mocks.api.workspace.mockResolvedValue({ ...workspace, total: items.length, items });
+    mocks.api.prelabel
+      .mockResolvedValueOnce({ ok: 500, skipped: 0, errors: 0, detected: 42 })
+      .mockRejectedValueOnce(new Error("模型服務中斷"));
+    render(<App />);
+    await screen.findByRole("heading", { name: "標注工作台" });
+    fireEvent.change(screen.getByPlaceholderText("選擇本機 .pt 模型"), {
+      target: { value: "D:\\models\\yolo.pt" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "對資料集執行" }));
+
+    expect(await screen.findByText(/前 1 批已完成（500 張、42 個框）/)).toBeInTheDocument();
+    expect(screen.getByText(/模型服務中斷/)).toBeInTheDocument();
+    expect(mocks.api.workspace).toHaveBeenCalledTimes(2);
   });
 
   it("loads and creates a dataset from a remote Service", async () => {

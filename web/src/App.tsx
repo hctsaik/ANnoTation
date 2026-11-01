@@ -20,6 +20,8 @@ const FORMATS = [
   ["csv", "CSV", "通用資料"],
 ] as const;
 
+const PRELABEL_BATCH_SIZE = 500;
+
 function lines(value: string) {
   return [...new Set(value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean))];
 }
@@ -508,14 +510,43 @@ export default function App() {
       setError("請先保存目前標注，再執行 AI 預標注。");
       return;
     }
+    const targetIds = [...new Set(itemIds ?? allItems.map((item) => item.item_id))];
+    if (!targetIds.length) {
+      setNotice("這個資料集沒有可執行預標注的影像。");
+      return;
+    }
+    const batchCount = Math.ceil(targetIds.length / PRELABEL_BATCH_SIZE);
+    const totals = { ok: 0, skipped: 0, errors: 0, detected: 0 };
+    let completedBatches = 0;
     setBusy(true);
     setError("");
     try {
-      const result = await api.prelabel(manifestId, { model_path: modelPath, confidence, overwrite: overwritePredictions, item_ids: itemIds }) as { ok: number; skipped: number; errors: number; detected: number };
-      setNotice(`AI 預標注完成：${result.ok} 張、${result.detected} 個框；略過 ${result.skipped} 張，錯誤 ${result.errors} 張`);
+      for (let batch = 0; batch < batchCount; batch += 1) {
+        const start = batch * PRELABEL_BATCH_SIZE;
+        const batchIds = targetIds.slice(start, start + PRELABEL_BATCH_SIZE);
+        setNotice(`AI 預標注處理中：第 ${batch + 1} / ${batchCount} 批（${batchIds.length} 張）`);
+        const result = await api.prelabel(manifestId, {
+          model_path: modelPath,
+          confidence,
+          overwrite: overwritePredictions,
+          item_ids: batchIds,
+        }) as { ok: number; skipped: number; errors: number; detected: number };
+        totals.ok += Number(result.ok) || 0;
+        totals.skipped += Number(result.skipped) || 0;
+        totals.errors += Number(result.errors) || 0;
+        totals.detected += Number(result.detected) || 0;
+        completedBatches += 1;
+      }
+      setNotice(`AI 預標注完成：${totals.ok} 張、${totals.detected} 個框；略過 ${totals.skipped} 張，錯誤 ${totals.errors} 張（${batchCount} 批）`);
       await refreshWorkspace();
     } catch (reason) {
-      setError(shortError(reason));
+      if (completedBatches > 0) {
+        const failure = shortError(reason);
+        await refreshWorkspace();
+        setError(`AI 預標注於第 ${completedBatches + 1} / ${batchCount} 批停止；前 ${completedBatches} 批已完成（${totals.ok} 張、${totals.detected} 個框）。${failure}`);
+      } else {
+        setError(shortError(reason));
+      }
     } finally {
       setBusy(false);
     }
