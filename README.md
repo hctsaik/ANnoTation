@@ -9,7 +9,9 @@ runtime.
 **Migration status:** local-folder and remote Service ingestion, synthetic HTTP
 iWISC task listing and claim, the rectangle Canvas workflow, classification,
 review, and a COCO export path are implemented. The local workflow has a
-synthetic real-service browser journey. This branch is not release-complete: see the
+synthetic real-service browser journey, and iWISC has a separate browser-to-
+service journey against a local HTTP fixture. This branch is not release-complete:
+see the
 [migration acceptance matrix](docs/react-migration-test-cases.md) for pending
 source modes, desktop integration, and end-to-end coverage.
 
@@ -71,9 +73,10 @@ journey. It uses a temporary nested image folder, creates and edits a rectangle,
 saves classification and review data, generates and checks a COCO export, then
 restarts the service and reads the annotation, classification, review comment,
 and export history back. The API is not mocked for this case, and the source image
-hash is checked for changes. Build `web/dist` before running it. On Windows the
-test starts the service with `py -3.14`; set `ANNOTATION_PYTHON` to the Python
-executable when using another interpreter.
+hash is checked for changes. A second browser journey registers a synthetic iWISC
+HTTP service, lists and claims a task, downloads its ZIP, and opens the image in
+React. Build `web/dist` before running the suite. On Windows the tests start the
+service with `py -3.14`; set `ANNOTATION_PYTHON` to another executable when needed.
 
 ## Architecture and project context
 

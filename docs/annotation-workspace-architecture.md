@@ -28,9 +28,10 @@ stop the service without embedding Streamlit.
   YOLO model can be invoked through the same API boundary.
 
 The React runtime supports local folder datasets, remote Service downloads, and
-iWISC task listing and claim through the app-owned connector layer. The synthetic
-iWISC HTTP integration is covered locally; compatibility with the target service
-remains open. The app does not require a cloud service for local work.
+iWISC task listing and claim through the app-owned connector layer. A browser E2E
+journey exercises iWISC registration, listing, claim, and ZIP image ingestion
+against a local HTTP fixture; compatibility with the target service and result
+delivery remain open. The app does not require a cloud service for local work.
 
 ## User workflow
 
@@ -55,6 +56,7 @@ evidence only; they do not establish React parity.
 The migration is not release-complete while any required parity row is pending or
 partial. The synthetic browser path now covers dataset creation, Canvas editing,
 classification, review, COCO export, and service restart/readback through the real
-local API. Remote Service and synthetic iWISC ingestion have local HTTP integration
-tests; compatibility with the target Service, a native file-picker bridge, and
-packaged Windows architecture validation remain open.
+local API. Remote Service ingestion has a local HTTP integration test, and iWISC
+has a browser journey through the real local API and a synthetic external HTTP
+service; compatibility with the target Service, result delivery, a native
+file-picker bridge, and packaged Windows architecture validation remain open.
