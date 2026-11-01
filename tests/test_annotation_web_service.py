@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-import json
+import io
 import http.client
+import json
 import threading
-from http.server import ThreadingHTTPServer
+import zipfile
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import urlencode
 
 import pytest
 from PIL import Image
@@ -124,6 +127,72 @@ def test_dataset_grant_rejects_files_outside_source_folder(tmp_path: Path):
         )
 
 
+def test_remote_dataset_list_download_and_ingest_round_trip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("APP_DATA_DIR", str(tmp_path / "app-data"))
+    image = io.BytesIO()
+    Image.new("RGB", (20, 16), "#ddaa88").save(image, format="PNG")
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, "w") as bundle:
+        bundle.writestr("images/remote-panel.png", image.getvalue())
+        bundle.writestr(
+            "annotations/remote-panel.json",
+            json.dumps({"version": "2.4.0", "flags": {}, "shapes": []}),
+        )
+    archive_bytes = archive.getvalue()
+
+    class RemoteServiceHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path == "/datasets":
+                payload = json.dumps([{"dataset_id": "remote-1", "name": "Remote inspection", "item_count": 1}]).encode()
+                content_type = "application/json"
+            elif self.path == "/datasets/remote-1/download":
+                payload = archive_bytes
+                content_type = "application/zip"
+            else:
+                self.send_error(404)
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, _format, *_args):
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), RemoteServiceHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    service = AnnotationService(tmp_path / "app-data")
+    service_url = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        with pytest.raises(ServiceError, match="valid remote Service URL"):
+            service.remote_datasets("file:///not-a-service")
+        datasets = service.remote_datasets(service_url)
+        assert datasets == [{"dataset_id": "remote-1", "name": "Remote inspection", "item_count": 1}]
+
+        created = service.create_dataset(
+            {
+                "mode": "remote",
+                "service_url": service_url,
+                "dataset_id": "remote-1",
+                "dataset_name": "Remote inspection",
+                "overwrite": True,
+            }
+        )
+        assert created["name"] == "Remote inspection"
+        assert created["item_count"] == 1
+        items = manifest_db.get_manifest_items(service.db_path, created["manifest_id"])
+        assert Path(items[0]["file_path"]).is_relative_to(tmp_path / "app-data" / "downloads")
+        detail = service.item_detail(created["manifest_id"], items[0]["item_id"])
+        assert detail["item"]["name"] == "remote-panel.png"
+        assert detail["annotation"]["shapes"] == []
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
 def test_loopback_server_requires_session_token_and_rejects_other_origins(service_and_dataset, tmp_path: Path):
     service, _source, _created = service_and_dataset
     static_dir = tmp_path / "dist"
@@ -163,6 +232,17 @@ def test_loopback_server_requires_session_token_and_rejects_other_origins(servic
         manifests = json.loads(response.read())
         assert response.status == 200
         assert len(manifests["manifests"]) == 1
+
+        remote_query = urlencode({"service_url": "file:///not-a-service"})
+        connection.request(
+            "GET",
+            f"/api/sources/remote?{remote_query}",
+            headers={"Origin": origin, "X-Annotation-Token": session["token"]},
+        )
+        response = connection.getresponse()
+        remote_error = json.loads(response.read())
+        assert response.status == 400
+        assert "valid remote Service URL" in remote_error["error"]
 
         connection.request(
             "GET",

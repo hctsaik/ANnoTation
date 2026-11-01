@@ -147,6 +147,10 @@ def make_handler(
             if not self._authorize():
                 return
             try:
+                if parts == ["api", "sources", "remote"]:
+                    service_url = query.get("service_url", [""])[0]
+                    self._json(200, {"datasets": service.remote_datasets(service_url)})
+                    return
                 if parts == ["api", "manifests"]:
                     self._json(200, {"manifests": service.list_manifests()})
                     return

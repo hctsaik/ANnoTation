@@ -8,6 +8,12 @@ export type Manifest = {
   item_count: number;
 };
 
+export type RemoteDataset = {
+  dataset_id: string;
+  name: string;
+  item_count: number;
+};
+
 export type Shape = {
   label: string;
   shape_type: string;

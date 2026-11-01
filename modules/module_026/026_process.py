@@ -123,16 +123,17 @@ def _run_remote(params: dict) -> dict:
 
     try:
         _proc19 = _load("_019_process", _HERE.parent / "module_019" / "019_process.py")
-        _cfg19  = _load("_019_config",  _HERE.parent / "module_019" / "_config.py")
-
-        downloads_dir = _cfg19.get_downloads_dir()
-        safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in dataset_name) or dataset_id
-        existing  = sorted(downloads_dir.glob(f"{safe_name}_*"), reverse=True)
-
-        if existing and not overwrite:
-            folder_path = str(existing[0])
-        else:
-            folder_path = _proc19.download_and_extract(service_url, dataset_id, dataset_name, downloads_dir)
+        downloaded = _proc19.execute_logic({
+            "service_url": service_url,
+            "dataset_id": dataset_id,
+            "dataset_name": dataset_name,
+            "overwrite": overwrite,
+        })
+        if downloaded.get("mode") != "done":
+            return _error(str(downloaded.get("error") or "遠端資料集下載失敗"))
+        folder_path = str(downloaded.get("local_dir") or "")
+        if not folder_path:
+            return _error("遠端資料集下載未回傳本機資料夾")
     except Exception as exc:
         return _error(f"下載失敗：{exc}")
 

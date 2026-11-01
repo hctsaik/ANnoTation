@@ -24,8 +24,9 @@ stop the service without embedding Streamlit.
 - `domain/tools/` provides the supported external labeling-tool adapters. A local
   YOLO model can be invoked through the same API boundary.
 
-The first React runtime supports local folder datasets. Remote and iWISC ingestion
-are not yet connected to this application. It does not require a cloud service.
+The React runtime supports local folder datasets and remote Service downloads.
+iWISC task ingestion is not yet connected. The app does not require a cloud
+service for local work.
 
 ## User workflow
 
@@ -50,5 +51,6 @@ evidence only; they do not establish React parity.
 The migration is not release-complete while any required parity row is pending or
 partial. The synthetic browser path now covers dataset creation, Canvas editing,
 classification, review, COCO export, and service restart/readback through the real
-local API. Remote/iWISC source handling, a native file-picker bridge, and packaged
-Windows architecture validation remain open.
+local API. Remote Service ingestion has a local HTTP integration test; compatibility
+with the target Service, iWISC task handling, a native file-picker bridge, and
+packaged Windows architecture validation remain open.

@@ -19,6 +19,7 @@ import tempfile
 import zipfile
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import quote
 
 _HERE = Path(__file__).parent
 
@@ -152,7 +153,7 @@ def execute_logic(params: dict) -> dict:
         _cfg.write_progress(0, 0, "", "使用已有資料夾", running=False)
     else:
         # 下載 zip
-        zip_url = f"{service_url}/datasets/{dataset_id}/download"
+        zip_url = f"{service_url}/datasets/{quote(dataset_id, safe='')}/download"
         _cfg.write_progress(0, 0, "", "下載中", running=True)
 
         with tempfile.TemporaryDirectory() as tmp_dir:

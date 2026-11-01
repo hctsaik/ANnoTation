@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { AnnotationCanvas } from "./AnnotationCanvas";
 import { api, loadImageUrl } from "./api";
 import { filterItems } from "./annotationModel";
-import type { Annotation, ExportResult, Item, LabelAnalysis, Manifest, Stage, Workspace } from "./types";
+import type { Annotation, ExportResult, Item, LabelAnalysis, Manifest, RemoteDataset, Stage, Workspace } from "./types";
 
 const STAGES: Array<{ id: Stage; label: string; icon: string }> = [
   { id: "data", label: "資料集", icon: "▦" },
@@ -41,9 +41,14 @@ export default function App() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [panel, setPanel] = useState<"source" | "labels">("source");
+  const [sourceMode, setSourceMode] = useState<"local" | "remote">("local");
   const [folderPath, setFolderPath] = useState("");
   const [datasetName, setDatasetName] = useState("");
   const [recursive, setRecursive] = useState(true);
+  const [remoteServiceUrl, setRemoteServiceUrl] = useState("");
+  const [remoteDatasets, setRemoteDatasets] = useState<RemoteDataset[]>([]);
+  const [remoteDatasetId, setRemoteDatasetId] = useState("");
+  const [overwriteRemote, setOverwriteRemote] = useState(false);
   const [selectedId, setSelectedId] = useState("");
   const [canvasRevision, setCanvasRevision] = useState(0);
   const [detail, setDetail] = useState<{ item: Item; annotation: Annotation } | null>(null);
@@ -230,7 +235,17 @@ export default function App() {
     setBusy(true);
     setError("");
     try {
-      const created = await api.createDataset({ folder_path: folderPath, manifest_name: datasetName, recursive });
+      const selectedRemote = remoteDatasets.find((item) => item.dataset_id === remoteDatasetId);
+      const params = sourceMode === "local"
+        ? { mode: "local", folder_path: folderPath, manifest_name: datasetName, recursive }
+        : {
+            mode: "remote",
+            service_url: remoteServiceUrl,
+            dataset_id: remoteDatasetId,
+            dataset_name: selectedRemote?.name ?? "",
+            overwrite: overwriteRemote,
+          };
+      const created = await api.createDataset(params);
       const result = await api.manifests();
       setManifests(result.manifests);
       setManifestId(created.manifest_id);
@@ -239,6 +254,23 @@ export default function App() {
       setFolderPath("");
       setDatasetName("");
     } catch (reason) {
+      setError(shortError(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function loadRemoteDatasets() {
+    setBusy(true);
+    setError("");
+    try {
+      const result = await api.remoteDatasets(remoteServiceUrl);
+      setRemoteDatasets(result.datasets);
+      setRemoteDatasetId(result.datasets[0]?.dataset_id ?? "");
+      setNotice(result.datasets.length ? `已載入 ${result.datasets.length} 個遠端資料集` : "此 Service 目前沒有可用的資料集");
+    } catch (reason) {
+      setRemoteDatasets([]);
+      setRemoteDatasetId("");
       setError(shortError(reason));
     } finally {
       setBusy(false);
@@ -440,16 +472,26 @@ export default function App() {
           <div className="page-heading"><div><p className="eyebrow">DATASET MANAGEMENT</p><h1>資料集與標籤</h1><p className="page-description">建立本機影像資料集，設定標注類別並檢視既有資料。</p></div><div className="heading-illustration">▦</div></div>
           <div className="subnav"><button className={panel === "source" ? "selected" : ""} onClick={() => setPanel("source")} type="button">資料來源</button><button className={panel === "labels" ? "selected" : ""} onClick={() => setPanel("labels")} type="button">標籤管理</button></div>
           {panel === "source" ? <div className="data-layout">
-            <section className="card source-card"><div className="card-title"><span className="card-icon mint">＋</span><div><h2>新增本機資料集</h2><p>選擇含有圖片的資料夾作為工作來源</p></div></div>
+            <section className="card source-card"><div className="card-title"><span className="card-icon mint">＋</span><div><h2>{sourceMode === "local" ? "新增本機資料集" : "從遠端 Service 載入資料集"}</h2><p>{sourceMode === "local" ? "選擇含有圖片的資料夾作為工作來源" : "先連線取得資料集清單，再下載選取的資料集"}</p></div></div>
               <form onSubmit={createDataset} className="form-stack">
-                <label>資料夾路徑<input value={folderPath} onChange={(event) => setFolderPath(event.target.value)} placeholder="例如：D:\\datasets\\inspection" required /></label>
-                <p className="field-help">圖片路徑只在本機服務中使用，不會傳送到外部伺服器。</p>
-                <label>資料集名稱<input value={datasetName} onChange={(event) => setDatasetName(event.target.value)} placeholder="留空時使用資料夾名稱" /></label>
-                <label className="checkbox-row"><input type="checkbox" checked={recursive} onChange={(event) => setRecursive(event.target.checked)} /><span>包含子資料夾</span></label>
-                <div className="supported-types"><span>支援格式</span><div>{["JPG", "PNG", "BMP", "WEBP", "TIFF"].map((item) => <b key={item}>{item}</b>)}</div></div>
-                <button className="primary-button" type="submit" disabled={busy || !folderPath.trim()}>建立資料集並開始標注 <span>→</span></button>
+                <label>來源類型<select aria-label="來源類型" value={sourceMode} onChange={(event) => { const value = event.target.value as "local" | "remote"; setSourceMode(value); setRemoteDatasets([]); setRemoteDatasetId(""); }}><option value="local">本機資料夾</option><option value="remote">遠端 Service</option></select></label>
+                {sourceMode === "local" ? <>
+                  <label>資料夾路徑<input value={folderPath} onChange={(event) => setFolderPath(event.target.value)} placeholder="例如：D:\\datasets\\inspection" required /></label>
+                  <p className="field-help">圖片路徑只在本機服務中使用，不會傳送到外部伺服器。</p>
+                  <label>資料集名稱<input value={datasetName} onChange={(event) => setDatasetName(event.target.value)} placeholder="留空時使用資料夾名稱" /></label>
+                  <label className="checkbox-row"><input type="checkbox" checked={recursive} onChange={(event) => setRecursive(event.target.checked)} /><span>包含子資料夾</span></label>
+                  <div className="supported-types"><span>支援格式</span><div>{["JPG", "PNG", "BMP", "WEBP", "TIFF"].map((item) => <b key={item}>{item}</b>)}</div></div>
+                </> : <>
+                  <label>Service Base URL<input aria-label="Service Base URL" type="url" value={remoteServiceUrl} onChange={(event) => { setRemoteServiceUrl(event.target.value); setRemoteDatasets([]); setRemoteDatasetId(""); }} placeholder="http://api.internal:8080" required /></label>
+                  <button className="secondary-button" type="button" onClick={() => void loadRemoteDatasets()} disabled={busy || !remoteServiceUrl.trim()}>載入資料集清單</button>
+                  {remoteDatasets.length > 0 && <>
+                    <label>遠端資料集<select aria-label="遠端資料集" value={remoteDatasetId} onChange={(event) => setRemoteDatasetId(event.target.value)}>{remoteDatasets.map((item) => <option key={item.dataset_id} value={item.dataset_id}>{item.name}（{item.item_count} 張）</option>)}</select></label>
+                    <label className="checkbox-row"><input type="checkbox" checked={overwriteRemote} onChange={(event) => setOverwriteRemote(event.target.checked)} /><span>重新下載（覆蓋現有）</span></label>
+                  </>}
+                </>}
+                <button className="primary-button" type="submit" disabled={busy || (sourceMode === "local" ? !folderPath.trim() : !remoteServiceUrl.trim() || !remoteDatasetId)}>{sourceMode === "local" ? "建立資料集並開始標注" : "下載資料集並開始標注"} <span>→</span></button>
               </form>
-              <div className="source-note"><span>i</span><p>目前 React 工作流程支援本機資料夾。原流程的遠端服務與 iWISC 任務來源仍列在相容性清單中。</p></div>
+              <div className="source-note"><span>i</span><p>{sourceMode === "local" ? "圖片路徑只在本機服務中使用，不會傳送到外部伺服器。" : "遠端資料會下載至本機工作區，再由本機服務建立資料集。"} iWISC 任務來源仍列在相容性清單中。</p></div>
             </section>
             <section className="card manifest-card"><div className="section-title"><div><h2>最近使用</h2><p>選擇資料集以繼續工作</p></div><span className="count-pill">{manifests.length} 個資料集</span></div>
               {manifests.length === 0 ? <div className="empty-card"><span>▦</span><h3>還沒有資料集</h3><p>輸入本機資料夾路徑後建立第一個工作區。</p></div> : <div className="manifest-list">{manifests.map((item) => <button key={item.manifest_id} className={`manifest-row ${manifestId === item.manifest_id ? "current" : ""}`} onClick={() => { setManifestId(item.manifest_id); setStage("workspace"); }} type="button">

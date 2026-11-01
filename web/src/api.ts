@@ -1,4 +1,4 @@
-import type { Annotation, ExportResult, Item, LabelAnalysis, Manifest, Workspace } from "./types";
+import type { Annotation, ExportResult, Item, LabelAnalysis, Manifest, RemoteDataset, Workspace } from "./types";
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
 let tokenPromise: Promise<string> | undefined;
@@ -44,6 +44,8 @@ export async function loadImageUrl(manifestId: string, itemId: string): Promise<
 
 export const api = {
   manifests: () => request<{ manifests: Manifest[] }>("/api/manifests"),
+  remoteDatasets: (serviceUrl: string) =>
+    request<{ datasets: RemoteDataset[] }>(`/api/sources/remote?${new URLSearchParams({ service_url: serviceUrl })}`),
   createDataset: (body: Record<string, unknown>) =>
     request<{ manifest_id: string; name: string; item_count: number }>("/api/manifests", {
       method: "POST",

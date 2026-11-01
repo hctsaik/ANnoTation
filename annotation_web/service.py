@@ -114,6 +114,21 @@ class AnnotationService:
         return path
 
     @staticmethod
+    def _remote_service_url(value: Any) -> str:
+        service_url = str(value or "").strip().rstrip("/")
+        parsed = urlparse(service_url)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ServiceError(400, "Enter a valid remote Service URL using HTTP or HTTPS")
+        return service_url
+
+    @staticmethod
     def _public_item(item: dict[str, Any], details: dict[str, Any] | None = None) -> dict[str, Any]:
         path = Path(str(item.get("file_path") or ""))
         result = {
@@ -148,33 +163,49 @@ class AnnotationService:
 
     def create_dataset(self, params: dict[str, Any]) -> dict[str, Any]:
         mode = params.get("mode", "local")
-        if mode != "local":
-            raise ServiceError(501, "This web build currently supports local folder datasets")
-        folder = str(params.get("folder_path") or "").strip()
-        if not folder:
-            raise ServiceError(400, "Choose a source folder first")
-        path = Path(folder).expanduser().resolve()
-        if not path.is_dir():
-            raise ServiceError(400, "The selected source folder is not available")
-        extensions = params.get("extensions") or list(IMAGE_EXTENSIONS)
-        extensions = sorted({str(ext).lower() for ext in extensions if str(ext).startswith(".")})
-        if not extensions:
-            raise ServiceError(400, "Choose at least one image format")
-        result = self._process("026").execute_logic(
-            {
-                "mode": "local",
-                "folder_path": str(path),
-                "manifest_name": str(params.get("manifest_name") or path.name),
-                "recursive": bool(params.get("recursive", True)),
-                "extensions": extensions,
-            }
-        )
+        if mode == "remote":
+            service_url = self._remote_service_url(params.get("service_url"))
+            dataset_id = str(params.get("dataset_id") or "").strip()
+            dataset_name = str(params.get("dataset_name") or "").strip()
+            if not dataset_id:
+                raise ServiceError(400, "Choose a remote dataset first")
+            result = self._process("026").execute_logic(
+                {
+                    "mode": "remote",
+                    "service_url": service_url,
+                    "dataset_id": dataset_id,
+                    "dataset_name": dataset_name,
+                    "overwrite": bool(params.get("overwrite", False)),
+                }
+            )
+        elif mode == "local":
+            folder = str(params.get("folder_path") or "").strip()
+            if not folder:
+                raise ServiceError(400, "Choose a source folder first")
+            path = Path(folder).expanduser().resolve()
+            if not path.is_dir():
+                raise ServiceError(400, "The selected source folder is not available")
+            extensions = params.get("extensions") or list(IMAGE_EXTENSIONS)
+            extensions = sorted({str(ext).lower() for ext in extensions if str(ext).startswith(".")})
+            if not extensions:
+                raise ServiceError(400, "Choose at least one image format")
+            result = self._process("026").execute_logic(
+                {
+                    "mode": "local",
+                    "folder_path": str(path),
+                    "manifest_name": str(params.get("manifest_name") or path.name),
+                    "recursive": bool(params.get("recursive", True)),
+                    "extensions": extensions,
+                }
+            )
+        else:
+            raise ServiceError(400, "Choose a supported dataset source")
         if result.get("mode") != "ready":
-            raise ServiceError(400, "Could not create a dataset from the selected folder")
+            raise ServiceError(502, str(result.get("error") or "Could not create a dataset from this source"))
         seed = result.get("yolo_seed", {})
         return {
             "manifest_id": result["manifest_id"],
-            "name": result.get("manifest_name") or path.name,
+            "name": result.get("manifest_name") or str(params.get("manifest_name") or params.get("dataset_name") or "Dataset"),
             "item_count": result.get("total_count", 0),
             "yolo_seed": {
                 key: seed[key]
@@ -182,6 +213,32 @@ class AnnotationService:
                 if key in seed
             },
         }
+
+    def remote_datasets(self, service_url: str) -> list[dict[str, Any]]:
+        service_url = self._remote_service_url(service_url)
+        try:
+            rows = self._process("019").list_datasets(service_url)
+        except Exception as exc:
+            raise ServiceError(502, f"Could not load remote datasets: {exc}") from exc
+        if not isinstance(rows, list):
+            raise ServiceError(502, "The remote Service returned an invalid dataset list")
+        datasets = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            dataset_id = str(row.get("dataset_id") or "").strip()
+            if not dataset_id:
+                continue
+            try:
+                item_count = max(0, int(row.get("item_count") or 0))
+            except (TypeError, ValueError):
+                item_count = 0
+            datasets.append({
+                "dataset_id": dataset_id,
+                "name": str(row.get("name") or dataset_id),
+                "item_count": item_count,
+            })
+        return datasets
 
     def workspace(self, manifest_id: str, settings: dict[str, Any] | None = None) -> dict[str, Any]:
         self._manifest(manifest_id)

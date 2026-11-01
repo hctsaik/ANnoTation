@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
     workspace: vi.fn(),
     detail: vi.fn(),
     exports: vi.fn(),
+    remoteDatasets: vi.fn(),
     saveAnnotation: vi.fn(),
     createDataset: vi.fn(),
     review: vi.fn(),
@@ -32,6 +33,7 @@ describe("ANnoTation workflow shell", () => {
     mocks.api.workspace.mockResolvedValue(workspace);
     mocks.api.detail.mockResolvedValue({ item: itemA, annotation: { version: "2.4.0", shapes: [] } });
     mocks.api.exports.mockResolvedValue({ exports: [] });
+    mocks.api.remoteDatasets.mockResolvedValue({ datasets: [{ dataset_id: "remote-1", name: "Remote inspection", item_count: 12 }] });
     mocks.api.review.mockResolvedValue({ status: "approved" });
     mocks.api.saveClassification.mockResolvedValue({ classification: "OK" });
     mocks.api.export.mockResolvedValue({ mode: "done", total_items: 2, annotated_items: 1 });
@@ -46,6 +48,26 @@ describe("ANnoTation workflow shell", () => {
     expect(stages.getByRole("button", { name: /資料集/ })).toBeInTheDocument();
     expect(stages.getByRole("button", { name: /審核/ })).toBeInTheDocument();
     expect(stages.getByRole("button", { name: /匯出/ })).toBeInTheDocument();
+  });
+
+  it("loads and creates a dataset from a remote Service", async () => {
+    mocks.api.createDataset.mockResolvedValue({ manifest_id: "remote-manifest", name: "Remote inspection", item_count: 12 });
+    render(<App />);
+    await screen.findByRole("heading", { name: "標注工作台" });
+    const stages = within(screen.getByRole("navigation", { name: "工作流程" }));
+    fireEvent.click(stages.getByRole("button", { name: /資料集/ }));
+    fireEvent.change(screen.getByLabelText("來源類型"), { target: { value: "remote" } });
+    fireEvent.change(screen.getByLabelText("Service Base URL"), { target: { value: "http://internal.example:8080" } });
+    fireEvent.click(screen.getByRole("button", { name: "載入資料集清單" }));
+    await screen.findByRole("option", { name: "Remote inspection（12 張）" });
+    fireEvent.click(screen.getByRole("button", { name: /下載資料集並開始標注/ }));
+    await waitFor(() => expect(mocks.api.createDataset).toHaveBeenCalledWith({
+      mode: "remote",
+      service_url: "http://internal.example:8080",
+      dataset_id: "remote-1",
+      dataset_name: "Remote inspection",
+      overwrite: false,
+    }));
   });
 
   it("supports reversible pending-work filters", async () => {

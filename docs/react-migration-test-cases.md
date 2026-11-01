@@ -11,9 +11,9 @@ The React branch has a working local-folder workflow and a first Canvas editor.
 legacy scenario has passed end-to-end. Release parity remains open while a row is
 partial or pending.
 
-Local validation for this branch: 11 Vitest tests, 5 Playwright tests (including
+Local validation for this branch: 12 Vitest tests, 5 Playwright tests (including
 a real local-folder → React → Python service save/restart/readback journey), and
-4 Python service/API tests pass; the production Vite build succeeds and `npm
+5 Python service/API tests pass; the production Vite build succeeds and `npm
 audit` reports no vulnerabilities. Windows ARM64, packaged-host, and real-model
 checks remain pending.
 
@@ -21,7 +21,7 @@ checks remain pending.
 |---|---|---|---|---|
 | APP-01 | Restore an existing dataset and keep the four workflow stages available | Last-used manifest is prioritized; four workflow stages remain available | React unit test and Playwright workflow case pass locally | Implemented; CI run pending |
 | DATA-01 | Create a dataset from a local folder, scan recursively, and accept supported image extensions | Local folder source calls module 026 and stores a manifest | `web/e2e/local-service.spec.ts` creates a dataset from a real temporary folder containing root and nested images through the built React app and Python service; service tests cover image and annotation round trips | Implemented; real-folder and recursive browser-to-service path passes; format matrix and CI evidence pending |
-| DATA-02 | Ingest remote and iWISC task sources | No React API path yet | Port supported source adapters and verify offline/error/restart behavior | Pending |
+| DATA-02 | Ingest remote and iWISC task sources | React can list and download remote Service datasets through modules 019/026 into the app-owned data directory; iWISC task listing and claim are not connected | Python service integration test uses a local HTTP Service to verify dataset listing, ZIP download, sidecar ingestion, and invalid URL rejection; verify against the target Service and add iWISC support | Partial; remote path passes local integration, iWISC pending |
 | SET-01 | Configure annotation labels, classification labels, and the external tool | React settings call the module 012 process layer | The real-service browser journey saves annotation/classification labels and verifies an applied classification after service restart; external tool override save/reopen remains | Implemented; persistence coverage partial |
 | LIST-01 | Search names, filter annotation/classification/review state, clear filters, and paginate | React list supports search, status, classification, low-confidence, label filters, and 20-item pages | Model/App tests and Playwright filter case pass; page-boundary and combined-filter cases remain | Implemented; coverage partial |
 | WORK-01 | Draw, move, resize, delete, undo, and redo rectangle annotations; navigate between images | React Canvas supports drag drawing, moving, lower-right resizing, deletion, undo/redo, and image navigation | `web/e2e/local-service.spec.ts` exercises draw, move, resize, delete, undo, and redo through the built React app, saves through the real API, switches images, restarts the service, and verifies the sidecar-backed rectangle is read back; representative user-file fixture and CI evidence remain | Implemented; synthetic real-service editor journey passes locally; broader fixture and CI evidence pending |
