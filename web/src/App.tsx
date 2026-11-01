@@ -198,6 +198,14 @@ export default function App() {
   const pageSize = 20;
   const pageCount = Math.max(1, Math.ceil(filteredItems.length / pageSize));
   const visibleItems = filteredItems.slice(page * pageSize, (page + 1) * pageSize);
+  const mergeSources = mergeFrom.filter((label) => label !== mergeTo);
+  const mergeSourceFiles = mergeSources.reduce((total, label) => total + (labelAnalysis?.label_map[label] ?? 0), 0);
+  const mergeSourceShapes = mergeSources.reduce((total, label) => total + (labelAnalysis?.label_counts[label] ?? 0), 0);
+  const mergeSourceClassifications = mergeSources.reduce((total, label) => total + (labelAnalysis?.classification_counts[label] ?? 0), 0);
+  const canMergeLabels = mergeSources.length > 0 && Boolean(mergeTo) && !mergeFrom.includes(mergeTo);
+  const mergeTargetImages = mergeTo ? labelAnalysis?.label_map[mergeTo] ?? 0 : 0;
+  const mergeTargetShapes = mergeTo ? labelAnalysis?.label_counts[mergeTo] ?? 0 : 0;
+  const mergeTargetClassifications = mergeTo ? labelAnalysis?.classification_counts[mergeTo] ?? 0 : 0;
   const currentManifest = manifests.find((item) => item.manifest_id === manifestId);
   const linkedIwiscTask = workspace?.iwisc_task ?? null;
   const linkedTaskCompleted = linkedIwiscTask?.ant_active === 2;
@@ -444,18 +452,34 @@ export default function App() {
     }
   }
 
-  async function updateLabels(action: string, body: Record<string, unknown>) {
+  async function updateLabels(action: string, body: Record<string, unknown>, onSuccess?: () => void) {
     if (!manifestId) return;
     setBusy(true);
     try {
       const result = await api.labelAction(manifestId, action, body) as { updated: number; labels: LabelAnalysis };
       setLabelAnalysis(result.labels);
+      onSuccess?.();
       setNotice(`已更新 ${result.updated} 個標注`);
     } catch (reason) {
       setError(shortError(reason));
     } finally {
       setBusy(false);
     }
+  }
+
+  function mergeSelectedLabels() {
+    if (!manifestId || !canMergeLabels) return;
+    const sourceNames = mergeSources.join("、");
+    const confirmed = window.confirm(
+      "合併標籤「" + sourceNames + "」到「" + mergeTo + "」？預估會修改 " + mergeSourceFiles
+      + " 次標注檔案（來源標籤分別計數，可能重複），涉及 " + mergeSourceShapes
+      + " 個框和 " + mergeSourceClassifications + " 個圖片分類值。",
+    );
+    if (!confirmed) return;
+    void updateLabels("merge", { sources: mergeSources, target: mergeTo }, () => {
+      setMergeFrom([]);
+      setMergeTo("");
+    });
   }
 
   async function runPrelabel(itemIds?: string[]) {
@@ -654,7 +678,9 @@ export default function App() {
               {labelAnalysis?.label_map && Object.keys(labelAnalysis.label_map).length ? <div className="label-table"><div className="label-table-head"><span>標籤</span><span>框數 / 圖片</span><span>操作</span></div>{Object.entries(labelAnalysis.label_map).map(([label, imageCount]) => <div className="label-table-row" key={label}><span className="label-tag">{label}</span><span>{labelAnalysis.label_counts[label] ?? 0}<small>{imageCount} 張圖片</small></span><div><button className="text-action" onClick={() => { setRenameFrom(label); setRenameTo(label); }} type="button">改名</button><button className="text-action danger-text" onClick={() => { if (window.confirm(`確定刪除「${label}」？這會影響 ${imageCount} 張圖片。`)) void updateLabels("delete", { label }); }} type="button">刪除</button></div></div>)}</div> : <div className="empty-card compact"><span>◇</span><h3>尚無框選標籤</h3><p>開始標注後，標籤統計會顯示在這裡。</p></div>}
               {labelAnalysis?.near_dupes?.length ? <div className="duplicate-list"><h3>可能相近的標籤</h3>{labelAnalysis.near_dupes.map((pair) => <p key={pair.join(":")}><span>{pair[0]}</span><i>↔</i><span>{pair[1]}</span></p>)}</div> : null}
               {renameFrom && <div className="inline-edit"><h3>重新命名標籤</h3><p className="field-help">將更新 {labelAnalysis?.label_map[renameFrom] ?? 0} 張圖片中的標籤。</p><div className="inline-fields"><input aria-label="原標籤" value={renameFrom} onChange={(event) => setRenameFrom(event.target.value)} /><span>→</span><input aria-label="新標籤" value={renameTo} onChange={(event) => setRenameTo(event.target.value)} /></div><div className="inline-actions"><button className="quiet-button" onClick={() => setRenameFrom("")} type="button">取消</button><button className="primary-button small-button" disabled={!renameTo.trim() || renameTo === renameFrom} onClick={() => { void updateLabels("rename", { old: renameFrom, new: renameTo }); setRenameFrom(""); }} type="button">確認改名</button></div></div>}
-              {labelAnalysis?.label_map && Object.keys(labelAnalysis.label_map).length > 1 && <div className="merge-box"><h3>合併標籤</h3><div className="inline-fields"><select aria-label="選擇要合併的標籤" multiple value={mergeFrom} onChange={(event) => setMergeFrom(Array.from(event.target.selectedOptions, (option) => option.value))}>{Object.keys(labelAnalysis.label_map).map((label) => <option key={label}>{label}</option>)}</select><span>→</span><select aria-label="合併後保留的標籤" value={mergeTo} onChange={(event) => setMergeTo(event.target.value)}><option value="">選擇目標</option>{Object.keys(labelAnalysis.label_map).map((label) => <option key={label}>{label}</option>)}</select></div><button className="quiet-button" disabled={!mergeFrom.length || !mergeTo || mergeFrom.includes(mergeTo)} onClick={() => { void updateLabels("merge", { sources: mergeFrom, target: mergeTo }); setMergeFrom([]); }} type="button">合併選取標籤</button></div>}
+              {labelAnalysis?.label_map && Object.keys(labelAnalysis.label_map).length > 1 && <div className="merge-box"><h3>合併標籤</h3><div className="inline-fields"><select aria-label="選擇要合併的標籤" multiple value={mergeFrom} onChange={(event) => setMergeFrom(Array.from(event.target.selectedOptions, (option) => option.value))}>{Object.keys(labelAnalysis.label_map).map((label) => <option key={label}>{label}</option>)}</select><span>→</span><select aria-label="合併後保留的標籤" value={mergeTo} onChange={(event) => setMergeTo(event.target.value)}><option value="">選擇目標</option>{Object.keys(labelAnalysis.label_map).map((label) => <option key={label}>{label}</option>)}</select></div>
+                {canMergeLabels && <div className="merge-impact-preview" data-testid="merge-impact-preview" role="status"><strong>合併影響預覽</strong><span>來源「{mergeSources.join("、")}」預估會修改 {mergeSourceFiles} 次標注檔案（來源標籤分別計數，可能重複），包含 {mergeSourceShapes} 個框與 {mergeSourceClassifications} 個圖片分類值。</span><span>目標「{mergeTo}」目前有 {mergeTargetImages} 張圖片、{mergeTargetShapes} 個框與 {mergeTargetClassifications} 個圖片分類值。</span></div>}
+                <button className="quiet-button" disabled={!canMergeLabels || busy} onClick={mergeSelectedLabels} type="button">合併選取標籤</button></div>}
             </section>
           </div>}
         </section>}

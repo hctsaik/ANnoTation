@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 
@@ -18,6 +19,8 @@ const mocks = vi.hoisted(() => ({
     review: vi.fn(),
     saveClassification: vi.fn(),
     export: vi.fn(),
+    labels: vi.fn(),
+    labelAction: vi.fn(),
   },
   loadImageUrl: vi.fn(),
 }));
@@ -45,6 +48,29 @@ describe("ANnoTation workflow shell", () => {
     mocks.api.review.mockResolvedValue({ status: "approved" });
     mocks.api.saveClassification.mockResolvedValue({ classification: "OK" });
     mocks.api.export.mockResolvedValue({ mode: "done", total_items: 2, annotated_items: 1 });
+    mocks.api.labels.mockResolvedValue({
+      manifest_id: "demo",
+      label_map: { scratch: 1 },
+      label_counts: { scratch: 1 },
+      near_dupes: [],
+      classification_counts: {},
+      total_items: 2,
+      annotated_xany: 1,
+      export_count: 0,
+    });
+    mocks.api.labelAction.mockResolvedValue({
+      updated: 1,
+      labels: {
+        manifest_id: "demo",
+        label_map: { scratch: 1 },
+        label_counts: { scratch: 1 },
+        near_dupes: [],
+        classification_counts: {},
+        total_items: 2,
+        annotated_xany: 1,
+        export_count: 0,
+      },
+    });
     mocks.loadImageUrl.mockResolvedValue("blob:local-test");
   });
 
@@ -133,6 +159,58 @@ describe("ANnoTation workflow shell", () => {
       api_token: "secret-value",
     }));
     expect(document.body.textContent).not.toContain("secret-value");
+  });
+
+  it("previews label-merge impact and requires confirmation before changing labels", async () => {
+    const analysis = {
+      manifest_id: "demo",
+      label_map: { scratch: 2, dent: 1, stain: 1 },
+      label_counts: { scratch: 3, dent: 2, stain: 1 },
+      near_dupes: [],
+      classification_counts: { scratch: 1, stain: 2 },
+      total_items: 2,
+      annotated_xany: 2,
+      export_count: 0,
+    };
+    mocks.api.labels.mockResolvedValue(analysis);
+    mocks.api.labelAction.mockResolvedValue({
+      updated: 3,
+      labels: {
+        ...analysis,
+        label_map: { stain: 3 },
+        label_counts: { stain: 6 },
+        classification_counts: { stain: 3 },
+      },
+    });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const user = userEvent.setup();
+
+    render(<App />);
+    const workflow = within(await screen.findByRole("navigation", { name: "工作流程" }));
+    fireEvent.click(workflow.getByRole("button", { name: /資料集/ }));
+    fireEvent.click(screen.getByRole("button", { name: "標籤管理" }));
+    await screen.findByText("標籤使用狀況");
+    await user.selectOptions(screen.getByLabelText("選擇要合併的標籤"), ["scratch", "dent"]);
+    await user.selectOptions(screen.getByLabelText("合併後保留的標籤"), "stain");
+
+    const preview = screen.getByTestId("merge-impact-preview");
+    expect(preview).toHaveTextContent("修改 3 次標注檔案");
+    expect(preview).toHaveTextContent("5 個框與 1 個圖片分類值");
+    expect(preview).toHaveTextContent("目標「stain」目前有 1 張圖片、1 個框與 2 個圖片分類值");
+
+    const mergeButton = screen.getByRole("button", { name: "合併選取標籤" });
+    fireEvent.click(mergeButton);
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("3 次標注檔案"));
+    expect(mocks.api.labelAction).not.toHaveBeenCalled();
+
+    confirm.mockReturnValue(true);
+    fireEvent.click(mergeButton);
+    await waitFor(() => expect(mocks.api.labelAction).toHaveBeenCalledWith("demo", "merge", {
+      sources: ["scratch", "dent"],
+      target: "stain",
+    }));
+    await waitFor(() => expect(screen.queryByTestId("merge-impact-preview")).not.toBeInTheDocument());
+    confirm.mockRestore();
   });
 
   it("supports reversible pending-work filters", async () => {

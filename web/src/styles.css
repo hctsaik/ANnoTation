@@ -134,6 +134,8 @@ input:focus, select:focus, textarea:focus { border-color: #8bc5af !important; bo
 .inline-fields { display: flex; align-items: center; gap: 8px; }
 .inline-fields > span { color: #9ca7a1; }
 .inline-fields select[multiple] { min-height: 74px; }
+.merge-impact-preview { display: grid; gap: 5px; margin-top: 10px; padding: 10px 11px; border: 1px solid #dcebe3; border-radius: 7px; background: #f6fbf8; color: #64746a; font-size: 9px; line-height: 1.55; }
+.merge-impact-preview strong { color: #3c6d55; font-size: 10px; }
 .inline-actions { display: flex; justify-content: flex-end; gap: 14px; margin-top: 9px; }
 .small-button { min-height: 30px; padding: 7px 10px; font-size: 9px; }
 .merge-box > .quiet-button { margin-top: 9px; }

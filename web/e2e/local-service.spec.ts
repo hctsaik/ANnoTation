@@ -23,6 +23,7 @@ let exportDir = "";
 let servicePort = 0;
 let temporaryRoot = "";
 let serviceLogs = "";
+const temporaryRoots: string[] = [];
 
 async function freeLoopbackPort(): Promise<number> {
   const probe = createServer();
@@ -92,6 +93,7 @@ async function stopLocalService(): Promise<void> {
 test("runs a real local dataset through annotation, review, export, and restart", async ({ page }) => {
   test.setTimeout(60_000);
   temporaryRoot = await mkdtemp(join(tmpdir(), "annotation-local-service-e2e-"));
+  temporaryRoots.push(temporaryRoot);
   appDataDir = join(temporaryRoot, "app data");
   sourceDir = join(temporaryRoot, "資料集 with spaces");
   exportDir = join(temporaryRoot, "exports with spaces");
@@ -236,8 +238,92 @@ test("runs a real local dataset through annotation, review, export, and restart"
   expect(createHash("sha256").update(await readFile(join(sourceDir, "panel-a.png"))).digest("hex")).toBe(originalImageHash);
 });
 
+test("previews label merge impact before the real service rewrites sidecars", async ({ page }) => {
+  test.setTimeout(40_000);
+  await stopLocalService();
+  temporaryRoot = await mkdtemp(join(tmpdir(), "annotation-label-merge-e2e-"));
+  temporaryRoots.push(temporaryRoot);
+  appDataDir = join(temporaryRoot, "app data");
+  sourceDir = join(temporaryRoot, "dataset");
+  await mkdir(sourceDir, { recursive: true });
+
+  const labels = [
+    ["panel-a", "scratch"],
+    ["panel-b", "dent"],
+    ["panel-target", "stain"],
+  ] as const;
+  for (const [stem, label] of labels) {
+    await writeFile(join(sourceDir, stem + ".png"), PNG_FIXTURE);
+    await writeFile(join(sourceDir, stem + ".json"), JSON.stringify({
+      version: "2.4.0",
+      flags: {},
+      shapes: [{
+        label,
+        points: [[2, 2], [24, 24]],
+        group_id: null,
+        description: "",
+        shape_type: "rectangle",
+        flags: {},
+      }],
+      imagePath: stem + ".png",
+      imageData: null,
+      imageHeight: 48,
+      imageWidth: 64,
+    }, null, 2));
+  }
+  servicePort = await freeLoopbackPort();
+  serviceProcess = await startLocalService();
+  const origin = "http://127.0.0.1:" + servicePort;
+
+  await page.goto(origin);
+  const workflow = page.getByRole("navigation", { name: "工作流程" });
+  await workflow.getByRole("button", { name: "資料集" }).click();
+  await page.getByLabel("資料夾路徑").fill(sourceDir);
+  await page.getByLabel("資料集名稱").fill("Merge impact fixture");
+  await page.getByRole("button", { name: /建立資料集並開始標注/ }).click();
+  await expect(page.getByRole("heading", { name: "標注工作台" })).toBeVisible();
+  await workflow.getByRole("button", { name: "資料集" }).click();
+  await page.getByRole("button", { name: "標籤管理" }).click();
+  await expect(page.getByRole("heading", { name: "標籤使用狀況" })).toBeVisible();
+
+  await page.getByLabel("選擇要合併的標籤").selectOption(["scratch", "dent"]);
+  await page.getByLabel("合併後保留的標籤").selectOption("stain");
+  const preview = page.getByTestId("merge-impact-preview");
+  await expect(preview).toContainText("修改 2 次標注檔案");
+  await expect(preview).toContainText("2 個框與 0 個圖片分類值");
+  await expect(preview).toContainText("目標「stain」目前有 1 張圖片");
+
+  const dialogMessages: string[] = [];
+  const dismissDialog = async (dialog: import("@playwright/test").Dialog) => {
+    dialogMessages.push(dialog.message());
+    await dialog.dismiss();
+  };
+  page.on("dialog", dismissDialog);
+  await page.getByRole("button", { name: "合併選取標籤" }).click();
+  expect(dialogMessages[0]).toContain("2 次標注檔案");
+  await expect(preview).toBeVisible();
+  page.off("dialog", dismissDialog);
+
+  let confirmationMessage = "";
+  page.once("dialog", async (dialog) => {
+    confirmationMessage = dialog.message();
+    await dialog.accept();
+  });
+  await page.getByRole("button", { name: "合併選取標籤" }).click();
+  expect(confirmationMessage).toContain("scratch、dent");
+  await expect(page.locator(".label-table-row")).toHaveCount(1);
+  await expect(page.locator(".label-table-row")).toContainText("stain");
+
+  for (const stem of ["panel-a", "panel-b", "panel-target"]) {
+    const saved = JSON.parse(await readFile(join(sourceDir, stem + ".json"), "utf8")) as {
+      shapes: Array<{ label: string }>;
+    };
+    expect(saved.shapes.map((shape) => shape.label)).toEqual(["stain"]);
+  }
+});
+
 test.afterAll(async () => {
   await stopLocalService();
-  if (temporaryRoot) await rm(temporaryRoot, { recursive: true, force: true });
+  for (const root of temporaryRoots) await rm(root, { recursive: true, force: true });
   if (serviceLogs) process.stderr.write(serviceLogs);
 });

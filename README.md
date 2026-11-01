@@ -8,8 +8,9 @@ runtime.
 
 **Migration status:** local-folder and remote Service ingestion, synthetic HTTP
 iWISC task listing and claim, the rectangle Canvas workflow, classification,
-review, and a COCO export path are implemented. The iWISC path also saves React
-sidecars into the local task record and supports local task completion; the current
+review, a COCO export path, and a confirmed label-merge impact preview are
+implemented. The iWISC path also saves React sidecars into the local task record and
+supports local task completion; the current
 REST connector reports external result delivery as unsupported. The local workflow
 has a synthetic real-service browser journey, and iWISC has a separate browser-to-
 service journey against a local HTTP fixture. This branch is not release-complete:
