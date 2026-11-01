@@ -78,9 +78,10 @@ data including approval and rejection with comments, saves and restores the
 configured external tool, and checks COCO, YOLO, Pascal VOC, ImageFolder, and CSV
 exports with a 100/0/0 split. After restarting the service, it reads the
 annotation, cleared classification, external tool, review decisions and
-comments, and all five export-history records back. The API is not mocked for
-this case, and the source image hash is checked for changes. A second browser
-journey registers a synthetic iWISC
+comments, and all five export-history records back. It also confirms an invalid
+Windows output path is reported as a failed attempt without replacing that
+history. The API is not mocked for this case, and the source image hash is
+checked for changes. A second browser journey registers a synthetic iWISC
 HTTP service, lists and claims a task, downloads its ZIP, opens the image, saves
 annotation sidecars, completes the local task, and verifies the unsupported
 external-delivery state and read-only editor. Build `web/dist` before running the

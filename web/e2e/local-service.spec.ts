@@ -234,6 +234,14 @@ test("runs a real local dataset through annotation, review, export, and restart"
   const csvExport = await readFile(join(exportDir, "csv", "annotations.csv"), "utf8");
   expect(csvExport).toContain(",train,OK,scratch,rectangle,");
 
+  await page.getByLabel("資料夾路徑").fill(join(temporaryRoot, "invalid|destination"));
+  await page.getByRole("button", { name: /檢查並開始匯出/ }).click();
+  await expect(page.getByRole("heading", { name: "匯出檢查結果" })).toBeVisible();
+  await expect(page.getByText(/Export failed/)).toBeVisible();
+  for (const format of ["coco_json", "yolo_txt", "pascal_voc", "imagefolder", "csv"]) {
+    await expect(page.getByText(format, { exact: true })).toBeVisible();
+  }
+
   await workflow.getByRole("button", { name: "審核" }).click();
   await page.getByRole("button", { name: /panel-b\.png/ }).click();
   await page.getByLabel("審核備註").fill("需補標後重送");
