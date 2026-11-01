@@ -52,7 +52,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from plugins.labeling.domain.adapters.xany_sidecar import (
+from domain.adapters.xany_sidecar import (
     IMG_EXTS as _IMG_EXTS,
     build_xany_json as _build_xany_json,
     xany_shape,

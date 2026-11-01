@@ -8,3 +8,15 @@ __pycache__/
 .streamlit/secrets.toml
 external-tools/**
 !external-tools/README.md
+
+# React build and browser-test output
+web/node_modules/
+web/dist/
+web/coverage/
+web/test-results/
+web/playwright-report/
+web/.vite/
+*.tsbuildinfo
+
+# Local runtime logs and data
+tmp/

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from annotation_runtime import shared_root, app_root
+
 """
 module_026/026_process.py — 統一資料來源處理層。
 支援三種模式：local（本地資料夾）、remote（遠端下載）、iwsc（iWISC 任務認領）。
@@ -12,7 +14,7 @@ from pathlib import Path
 from uuid import uuid4
 
 _HERE  = Path(__file__).parent
-_PROJECT_ROOT = Path(__file__).parents[6]
+_PROJECT_ROOT = app_root()
 _CIM_LOG_DIR  = Path(os.environ.get("CIM_LOG_DIR", str(_PROJECT_ROOT / "tmp" / "cim_log")))
 
 # ── 動態載入依賴 ──────────────────────────────────────────────────────────────
@@ -24,14 +26,14 @@ def _load(name: str, path: Path):
     return mod
 
 _cfg  = _load("_026_config", _HERE / "_config.py")
-_mdb  = _load("_manifest_db", _HERE.parents[3] / "scripts" / "shared" / "_manifest_db.py")
-_base = _load("_config_base", _HERE.parents[3] / "scripts" / "shared" / "_config_base.py")
+_mdb  = _load("_manifest_db", shared_root() / "_manifest_db.py")
+_base = _load("_config_base", shared_root() / "_config_base.py")
 _p010 = _load("_010_process", _HERE.parent / "module_010" / "010_process.py")
 
 
 def _get_service():
-    from plugins.labeling.domain.services import AnnotationService
-    from plugins.labeling.domain.storage.workspace import AnnotationWorkspace
+    from domain.services import AnnotationService
+    from domain.storage.workspace import AnnotationWorkspace
     ws_path = _cfg.get_annotation_workspace_path()
     return AnnotationService(AnnotationWorkspace(ws_path))
 
@@ -90,7 +92,7 @@ def _seed_yolo_boxes(folder_path: str) -> dict:
     effort: any failure is swallowed (ingestion must still succeed) and reported
     in the returned dict."""
     try:
-        from plugins.labeling.domain.yolo_xany_seed import (
+        from domain.yolo_xany_seed import (
             looks_like_yolo_dir, seed_xany_json_from_yolo)
         if not looks_like_yolo_dir(Path(folder_path)):
             return {"applied": False, "reason": "not-a-yolo-dir"}

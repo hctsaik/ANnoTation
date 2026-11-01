@@ -1,6 +1,6 @@
 """Reusable annotation common component for the Python sidecar."""
 
-from plugins.labeling.domain.core.models import (
+from domain.core.models import (
     Annotation,
     AnnotationSet,
     AttributeDef,
@@ -12,7 +12,7 @@ from plugins.labeling.domain.core.models import (
     LabelSchema,
     PolygonGeometry,
 )
-from plugins.labeling.domain.core.validation import ValidationIssue, validate_annotation_set
+from domain.core.validation import ValidationIssue, validate_annotation_set
 
 __all__ = [
     "Annotation",

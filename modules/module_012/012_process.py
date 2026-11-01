@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from annotation_runtime import shared_root, app_root
+
 """
 012_process.py — Annotation Session 處理層。
 無 Streamlit import。
@@ -13,7 +15,7 @@ from pathlib import Path
 
 # ─── Logger 設定 ──────────────────────────────────────────────────────────────
 
-_LOG_DIR = Path(os.environ.get("CIM_LOG_DIR", str(Path(__file__).parents[6] / "tmp" / "cim_log")))
+_LOG_DIR = Path(os.environ.get("CIM_LOG_DIR", str(app_root() / "tmp" / "cim_log")))
 _LOG_FILE = _LOG_DIR / "module_012_process.log"
 
 _LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -37,12 +39,12 @@ _external_tools = _ilu.module_from_spec(_tools_spec)
 _tools_spec.loader.exec_module(_external_tools)
 
 _mdb_spec = _ilu.spec_from_file_location(
-    "_manifest_db", _HERE.parents[3] / "scripts" / "shared" / "_manifest_db.py"
+    "_manifest_db", shared_root() / "_manifest_db.py"
 )
 _mdb = _ilu.module_from_spec(_mdb_spec)
 _mdb_spec.loader.exec_module(_mdb)
 
-_PROJECT_ROOT = Path(getattr(_cfg, "_PROJECT_ROOT", Path(__file__).parents[6]))
+_PROJECT_ROOT = Path(getattr(_cfg, "_PROJECT_ROOT", app_root()))
 
 
 # ─── 輔助函式 ─────────────────────────────────────────────────────────────────

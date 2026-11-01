@@ -1,0 +1,4 @@
+# Optional dependency for local YOLO pre-labeling.
+# Install only in an environment with compatible PyTorch wheels.
+-r requirements-web.txt
+ultralytics>=8.3

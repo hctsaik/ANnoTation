@@ -6,7 +6,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from plugins.labeling.domain.adapters.xanylabeling_runtime import detect_xanylabeling, launch_xanylabeling_project
+from domain.adapters.xanylabeling_runtime import detect_xanylabeling, launch_xanylabeling_project
 
 
 @dataclass(slots=True)

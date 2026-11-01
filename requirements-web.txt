@@ -1,0 +1,2 @@
+# Runtime dependency for reading local image dimensions during dataset scanning.
+Pillow>=10.0

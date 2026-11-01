@@ -1,35 +1,77 @@
-# Labeling plugin
+# ANnoTation React Web
 
-桌面標註工具的可攜式目錄規格見 [`external-tools/README.md`](external-tools/README.md)。
-未部署外部工具時，內建網頁 Canvas 仍可獨立完成標注。
+ANnoTation is being rebuilt as a local React application with a Python service
+for dataset scanning, annotations, review, exports, external tools, and local
+model inference. The React app does not launch Streamlit. Legacy Streamlit pages
+remain in the source tree as migration references and are not part of this
+runtime.
 
-Labeling 是 CIM 平台上的**一個（重要）plugin**，不是平台本身。這個目錄是 Labeling
-的**單一宣告入口**：要找 Labeling 擁有哪些東西，看 [`plugin.manifest.yaml`](plugin.manifest.yaml)。
+**Migration status:** the local-folder workflow and first Canvas editor are
+implemented. This branch is not release-complete: see the
+[migration acceptance matrix](docs/react-migration-test-cases.md) for pending
+source modes, desktop integration, and end-to-end coverage.
 
-## 邊界
+## Run the built local app
 
-- Labeling 依賴平台 `core/`（`core.integrations` 的 `ExternalSystemConnector` /
-  `SystemTenant`，以及逐步上移的共用基礎設施）。
-- 依賴方向單向：`plugins/labeling/* → core/*`，**禁止** `core/* → plugins/labeling/*`。
-  由 `tests/test_architecture_boundaries.py` 強制。
+From PowerShell at the repository root:
 
-## 資產（目前 vs 目標）
+```powershell
+py -m pip install -r requirements-web.txt
+Set-Location web
+npm ci
+npm run build
+Set-Location ..
+py -m annotation_web.server --host 127.0.0.1 --port 4173
+```
 
-`plugin.manifest.yaml` 列出 domain 套件、modules、sheet、MCP、docs、tests 的
-**現址（current_path）** 與 **目標路徑（target_path）**。
+Open the local address printed by the server. The service binds only to loopback
+and uses a per-process session token for its API. Set `APP_DATA_DIR` before
+launching to choose the local database and settings directory; by default they
+are stored in `~/.annotation-standalone`.
 
-平台重構採漸進路線（見 [`../../../docs/platform/architecture-restructure-discussion.md`](../../../docs/platform/architecture-restructure-discussion.md)）：
+## Develop the React UI
 
-- **已完成（P0–P5）**：共用功能索引、文件去重、`_config_base` 共用化、架構邊界守門、
-  收斂 `cim_annotation`、建立 `core/` 並把 `cim_platform` 移入 `core.integrations`。
-- **本目錄（P6 宣告式家）**：`plugin.manifest.yaml` 已宣告 Labeling 全部資產歸屬。
-- **待執行（P6 物理搬移，package-build + golden-path 驗證 gated）**：把 `annotation/`、
-  `scripts/module_*`、`sheets/annotation.yaml`、`mcp/annotation_mcp`、相關 docs/tests
-  實際搬入本目錄，並同步 `engine.py` 掃描根、runner `sys.path`、`engine.spec`、
-  `package.json` filter，最後移除 `cim_platform` shim。此步驟必須在實際 app 上跑過
-  package-build 與 golden-path MCP 才算完成（owner 決議 D4）。
+Use a Node release supported by Vitest 5: Node 22.12.x, 24.x, or 26+.
 
-## 模組命名（D3）
+Run the Python service on port 4173 in one terminal, then start Vite in another:
 
-資料夾與 tool ID 凍結為 `module_NNN`；語意名（slug / name）放在 manifest 當 metadata，
-不靠改資料夾名取得可讀性。
+```powershell
+Set-Location web
+npm run dev
+```
+
+Vite proxies API requests to the local Python service. Dataset and model paths
+are entered directly for now; native file and folder pickers require the desktop
+host bridge tracked in the acceptance matrix.
+
+## Local model support
+
+The API can run YOLO pre-labeling with a local model file. Install
+`requirements-web-ai.txt` in a Python environment that has compatible PyTorch
+wheels. Model runtime compatibility has not yet been validated on every target
+architecture.
+
+## Verification
+
+```powershell
+Set-Location web
+npm test
+npm run build
+npx playwright install chromium
+npm run e2e
+Set-Location ..
+py -m pip install pytest
+py -m pytest tests/test_annotation_web_service.py -q
+```
+
+## Architecture and project context
+
+- [Workspace architecture](docs/annotation-workspace-architecture.md)
+- [Streamlit-to-React acceptance cases](docs/react-migration-test-cases.md)
+- [Historical Streamlit E2E scorecard](docs/annotation-app-e2e-scorecard.md)
+- [External tool packaging](external-tools/README.md)
+- [Plugin asset manifest](plugin.manifest.yaml)
+
+The existing process modules are reused behind the local service boundary.
+The React runtime currently supports local folder datasets. Remote and iWISC
+ingestion and a packaged native desktop host remain pending.
