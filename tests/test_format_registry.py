@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from plugins.labeling.domain.formats.contracts import FormatCapabilities, FormatDescriptor
-from plugins.labeling.domain.formats.registry import FormatRegistry, get_format_registry, reset_format_registry
+from domain.formats.contracts import FormatCapabilities, FormatDescriptor
+from domain.formats.registry import FormatRegistry, get_format_registry, reset_format_registry
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────

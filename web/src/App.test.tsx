@@ -9,6 +9,9 @@ const mocks = vi.hoisted(() => ({
     detail: vi.fn(),
     exports: vi.fn(),
     remoteDatasets: vi.fn(),
+    iwiscTenants: vi.fn(),
+    iwiscTasks: vi.fn(),
+    registerIwiscTenant: vi.fn(),
     saveAnnotation: vi.fn(),
     createDataset: vi.fn(),
     review: vi.fn(),
@@ -34,6 +37,9 @@ describe("ANnoTation workflow shell", () => {
     mocks.api.detail.mockResolvedValue({ item: itemA, annotation: { version: "2.4.0", shapes: [] } });
     mocks.api.exports.mockResolvedValue({ exports: [] });
     mocks.api.remoteDatasets.mockResolvedValue({ datasets: [{ dataset_id: "remote-1", name: "Remote inspection", item_count: 12 }] });
+    mocks.api.iwiscTenants.mockResolvedValue({ tenants: [{ tenant_id: "tenant-1", system_name: "AOI Line 1", server_host_name: "http://aoi.internal", target_format: "coco", has_api_token: true }] });
+    mocks.api.iwiscTasks.mockResolvedValue({ tasks: [{ ant_id: "ant-01", ant_active: 0, ant_period: "2026-11", external_context: { lot: "L01" } }] });
+    mocks.api.registerIwiscTenant.mockResolvedValue({ tenant_id: "tenant-2", system_name: "AOI Line 2", server_host_name: "http://aoi-2.internal", target_format: "coco", has_api_token: false });
     mocks.api.review.mockResolvedValue({ status: "approved" });
     mocks.api.saveClassification.mockResolvedValue({ classification: "OK" });
     mocks.api.export.mockResolvedValue({ mode: "done", total_items: 2, annotated_items: 1 });
@@ -68,6 +74,47 @@ describe("ANnoTation workflow shell", () => {
       dataset_name: "Remote inspection",
       overwrite: false,
     }));
+  });
+
+  it("loads iWISC tasks and claims the selected task into a local dataset", async () => {
+    mocks.api.createDataset.mockResolvedValue({ manifest_id: "iwisc-manifest", name: "iWISC-ant-01", item_count: 3, iwisc_ant_id: "ant-01" });
+    render(<App />);
+    await screen.findByRole("heading", { name: "標注工作台" });
+    fireEvent.click(within(screen.getByRole("navigation", { name: "工作流程" })).getByRole("button", { name: /資料集/ }));
+    fireEvent.change(screen.getByLabelText("來源類型"), { target: { value: "iwisc" } });
+    await screen.findByRole("option", { name: /AOI Line 1/ });
+    fireEvent.change(screen.getByLabelText("使用者 ID"), { target: { value: "worker-7" } });
+    fireEvent.click(screen.getByRole("button", { name: "查看任務清單" }));
+    expect(await screen.findByTestId("iwisc-task-ant-01")).toBeInTheDocument();
+    expect(mocks.api.iwiscTasks).toHaveBeenCalledWith("tenant-1");
+    fireEvent.click(screen.getByTestId("iwisc-task-ant-01"));
+    fireEvent.click(screen.getByRole("button", { name: /認領任務並載入影像/ }));
+    await waitFor(() => expect(mocks.api.createDataset).toHaveBeenCalledWith({
+      mode: "iwisc",
+      tenant_id: "tenant-1",
+      ant_id: "ant-01",
+      user_id: "worker-7",
+    }));
+    expect(await screen.findByText(/任務 ant-01 已載入/)).toBeInTheDocument();
+  });
+
+  it("registers an iWISC connection without echoing the API key into the page", async () => {
+    render(<App />);
+    await screen.findByRole("heading", { name: "標注工作台" });
+    fireEvent.click(within(screen.getByRole("navigation", { name: "工作流程" })).getByRole("button", { name: /資料集/ }));
+    fireEvent.change(screen.getByLabelText("來源類型"), { target: { value: "iwisc" } });
+    fireEvent.click(await screen.findByText("新增外部系統連線"));
+    fireEvent.change(screen.getByLabelText("連線別名"), { target: { value: "AOI Line 2" } });
+    fireEvent.change(screen.getByLabelText("iWISC Service 位址"), { target: { value: "https://aoi-2.internal" } });
+    fireEvent.change(screen.getByLabelText("iWISC API 金鑰"), { target: { value: "secret-value" } });
+    fireEvent.click(screen.getByRole("button", { name: "新增連線" }));
+    await waitFor(() => expect(mocks.api.registerIwiscTenant).toHaveBeenCalledWith({
+      system_name: "AOI Line 2",
+      server_host_name: "https://aoi-2.internal",
+      target_format: "coco",
+      api_token: "secret-value",
+    }));
+    expect(document.body.textContent).not.toContain("secret-value");
   });
 
   it("supports reversible pending-work filters", async () => {

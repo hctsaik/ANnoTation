@@ -14,6 +14,21 @@ export type RemoteDataset = {
   item_count: number;
 };
 
+export type IwiscTenant = {
+  tenant_id: string;
+  system_name: string;
+  server_host_name: string;
+  target_format: string;
+  has_api_token: boolean;
+};
+
+export type IwiscTask = {
+  ant_id: string;
+  ant_active: number;
+  ant_period: string;
+  external_context: Record<string, string>;
+};
+
 export type Shape = {
   label: string;
   shape_type: string;

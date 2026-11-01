@@ -5,13 +5,13 @@ from pathlib import Path
 
 from PIL import Image
 
-from plugins.labeling.domain.adapters.coco import export_coco, import_coco_file
-from plugins.labeling.domain.adapters.isat import export_isat, import_isat_file
-from plugins.labeling.domain.adapters.labelme import export_labelme, import_labelme_file, import_labelme_project_dir
-from plugins.labeling.domain.adapters.xanylabeling import XAnyLabelingProjectAdapter
-from plugins.labeling.domain.adapters.yolo_detection import export_yolo_detection, import_yolo_detection_dir
-from plugins.labeling.domain.adapters.yolo_segmentation import export_yolo_segmentation, import_yolo_segmentation_dir
-from plugins.labeling.domain.core.models import (
+from domain.adapters.coco import export_coco, import_coco_file
+from domain.adapters.isat import export_isat, import_isat_file
+from domain.adapters.labelme import export_labelme, import_labelme_file, import_labelme_project_dir
+from domain.adapters.xanylabeling import XAnyLabelingProjectAdapter
+from domain.adapters.yolo_detection import export_yolo_detection, import_yolo_detection_dir
+from domain.adapters.yolo_segmentation import export_yolo_segmentation, import_yolo_segmentation_dir
+from domain.core.models import (
     Annotation,
     AnnotationSet,
     BBoxGeometry,

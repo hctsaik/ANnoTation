@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from plugins.labeling.domain.adapters.common import write_conversion_report, write_json_artifact
-from plugins.labeling.domain.core.models import (
+from domain.adapters.common import write_conversion_report, write_json_artifact
+from domain.core.models import (
     AdapterResult,
     Annotation,
     AnnotationSet,

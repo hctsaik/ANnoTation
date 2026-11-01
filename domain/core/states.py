@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from plugins.labeling.domain.core.models import AnnotationSet, ReviewDecision, utc_now_iso
+from domain.core.models import AnnotationSet, ReviewDecision, utc_now_iso
 
 
 VALID_ANNOTATION_SET_TRANSITIONS = {

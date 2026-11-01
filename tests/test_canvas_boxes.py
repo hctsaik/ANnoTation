@@ -1,7 +1,7 @@
 """canvas_boxes 驗收:in-browser 編輯器像素框 ⇄ X-AnyLabeling sidecar。"""
 from __future__ import annotations
 
-from plugins.labeling.domain.adapters.canvas_boxes import (
+from domain.adapters.canvas_boxes import (
     canvas_boxes_to_sidecar,
     sidecar_to_canvas_boxes,
 )

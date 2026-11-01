@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from plugins.labeling.domain.formats.contracts import FormatAdapter, FormatDescriptor
+from domain.formats.contracts import FormatAdapter, FormatDescriptor
 
 
 class FormatRegistry:
@@ -46,7 +46,7 @@ _registry: FormatRegistry | None = None
 def get_format_registry() -> FormatRegistry:
     global _registry
     if _registry is None:
-        from plugins.labeling.domain.formats.builtins import register_builtins
+        from domain.formats.builtins import register_builtins
         _registry = FormatRegistry()
         register_builtins(_registry)
     return _registry

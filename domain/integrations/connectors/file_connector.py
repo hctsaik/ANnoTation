@@ -15,13 +15,13 @@ import json
 import time
 from pathlib import Path
 
-from core.integrations.connector import (
+from domain.integrations.contracts import (
     ConnectorHealth,
     ExternalSystemConnector,
     ExternalTask as AntTask,
     ExternalTaskDetail as TaskDetailResponse,
 )
-from core.integrations.tenant import SystemTenant
+from domain.core.models import SystemTenant
 
 
 class FileConnector(ExternalSystemConnector):

@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from plugins.labeling.domain.core.models import AdapterResult, AnnotationSet, ConversionReport, ImageAsset, LabelSchema
+    from domain.core.models import AdapterResult, AnnotationSet, ConversionReport, ImageAsset, LabelSchema
 
 
 @dataclass

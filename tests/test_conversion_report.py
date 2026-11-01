@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from plugins.labeling.domain.core.models import ConversionReport, LossEntry
+from domain.core.models import ConversionReport, LossEntry
 
 
 def test_lossentry_fields() -> None:

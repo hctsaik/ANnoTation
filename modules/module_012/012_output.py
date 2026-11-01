@@ -527,7 +527,7 @@ def _launch_isat(file_path: str, isat_exe: str) -> str | None:
 def _launch_tool(tool_id: str, file_path: str, exe_override: str | None = None) -> str | None:
     """Unified tool launch via ToolRegistry. Returns error string or None on success."""
     try:
-        from plugins.labeling.domain.tools.registry import get_tool_registry
+        from domain.tools.registry import get_tool_registry
         _, adapter = get_tool_registry().get(tool_id)
         return adapter.launch_file(file_path, {"executable_override": exe_override})
     except Exception as exc:
@@ -1269,7 +1269,7 @@ def _dataset_class_list(image_path: str) -> list[str]:
         img_dir = Path(image_path).parent
         folder = img_dir.parent if img_dir.name.lower() == "images" else img_dir
         try:
-            from plugins.labeling.domain.yolo_xany_seed import find_class_source
+            from domain.yolo_xany_seed import find_class_source
             names = find_class_source(folder).names
             if names:
                 return names

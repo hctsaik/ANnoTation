@@ -4,8 +4,8 @@ import shutil
 from pathlib import Path
 from urllib.parse import urlparse
 
-from plugins.labeling.domain.adapters.common import write_json_artifact
-from plugins.labeling.domain.core.models import AdapterResult, ImageAsset, LabelSchema
+from domain.adapters.common import write_json_artifact
+from domain.core.models import AdapterResult, ImageAsset, LabelSchema
 
 
 class XAnyLabelingProjectAdapter:

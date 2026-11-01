@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from core.integrations.connector import (
+from domain.integrations.contracts import (
     ConnectorHealth,
     ExternalSystemConnector,
     ExternalTask as AntTask,

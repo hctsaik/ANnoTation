@@ -83,6 +83,18 @@ input:focus, select:focus, textarea:focus { border-color: #8bc5af !important; bo
 .source-note { display: flex; align-items: flex-start; gap: 8px; border-top: 1px solid #eff1f0; padding-top: 13px; margin-top: 18px; color: #939f99; }
 .source-note > span { flex: 0 0 auto; border: 1px solid #dfe9e3; color: #719485; border-radius: 50%; width: 16px; height: 16px; display: grid; place-items: center; font-size: 9px; }
 .source-note p { margin: 0; font-size: 9px; line-height: 1.6; }
+.iwisc-task-list { display: grid; gap: 7px; max-height: 360px; overflow: auto; padding: 2px; }
+.iwisc-task { display: flex; align-items: center; gap: 12px; width: 100%; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; color: #3f4d63; text-align: left; background: #fff; cursor: pointer; }
+.iwisc-task:hover, .iwisc-task.selected { border-color: #7fa6d8; background: #f3f7fd; }
+.iwisc-task-main { display: grid; flex: 1; gap: 3px; min-width: 0; }
+.iwisc-task-main small { overflow: hidden; color: #8390a3; text-overflow: ellipsis; white-space: nowrap; }
+.iwisc-task-status { flex: 0 0 auto; border-radius: 20px; padding: 4px 8px; color: #8c6416; background: #fff6df; font-size: 10px; }
+.iwisc-task-status.in-progress { color: #476990; background: #eaf2fd; }
+.iwisc-task-action { flex: 0 0 auto; color: #42699d; font-size: 11px; font-weight: 650; }
+.iwisc-pagination { display: flex; align-items: center; justify-content: center; gap: 12px; color: #8793a4; font-size: 10px; }
+.iwisc-pagination .secondary-button { padding: 6px 10px; }
+.iwisc-connection { display: grid; gap: 10px; border-top: 1px solid #edf0f4; padding-top: 12px; color: #52617a; font-size: 11px; }
+.iwisc-connection summary { cursor: pointer; font-weight: 650; }
 .section-title { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 17px; }
 .count-pill { flex: 0 0 auto; border: 1px solid #e9edeb; background: #fafbfa; padding: 6px 9px; border-radius: 18px; color: #87938d; font-size: 9px; }
 .manifest-list { border-top: 1px solid #edf0ee; }

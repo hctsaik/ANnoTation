@@ -15,7 +15,7 @@ in-browser 編輯器用的是最簡單的像素框 ``{label, x, y, w, h}``(左�
 """
 from __future__ import annotations
 
-from plugins.labeling.domain.adapters.xany_sidecar import build_xany_json, xany_shape
+from domain.adapters.xany_sidecar import build_xany_json, xany_shape
 
 
 def sidecar_to_canvas_boxes(sidecar: dict) -> list[dict]:

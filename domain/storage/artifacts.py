@@ -4,7 +4,7 @@ import hashlib
 import shutil
 from pathlib import Path
 
-from plugins.labeling.domain.core.models import ArtifactRef
+from domain.core.models import ArtifactRef
 
 
 def sha256_file(path: Path) -> str:

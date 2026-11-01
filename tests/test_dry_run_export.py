@@ -5,9 +5,9 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from plugins.labeling.domain.formats.registry import reset_format_registry
-from plugins.labeling.domain.services import AnnotationService
-from plugins.labeling.domain.storage.workspace import AnnotationWorkspace
+from domain.formats.registry import reset_format_registry
+from domain.services import AnnotationService
+from domain.storage.workspace import AnnotationWorkspace
 
 
 def _write_image(path: Path) -> None:

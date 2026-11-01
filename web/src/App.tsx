@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { AnnotationCanvas } from "./AnnotationCanvas";
 import { api, loadImageUrl } from "./api";
 import { filterItems } from "./annotationModel";
-import type { Annotation, ExportResult, Item, LabelAnalysis, Manifest, RemoteDataset, Stage, Workspace } from "./types";
+import type { Annotation, ExportResult, IwiscTask, IwiscTenant, Item, LabelAnalysis, Manifest, RemoteDataset, Stage, Workspace } from "./types";
 
 const STAGES: Array<{ id: Stage; label: string; icon: string }> = [
   { id: "data", label: "資料集", icon: "▦" },
@@ -41,7 +41,7 @@ export default function App() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [panel, setPanel] = useState<"source" | "labels">("source");
-  const [sourceMode, setSourceMode] = useState<"local" | "remote">("local");
+  const [sourceMode, setSourceMode] = useState<"local" | "remote" | "iwisc">("local");
   const [folderPath, setFolderPath] = useState("");
   const [datasetName, setDatasetName] = useState("");
   const [recursive, setRecursive] = useState(true);
@@ -49,6 +49,17 @@ export default function App() {
   const [remoteDatasets, setRemoteDatasets] = useState<RemoteDataset[]>([]);
   const [remoteDatasetId, setRemoteDatasetId] = useState("");
   const [overwriteRemote, setOverwriteRemote] = useState(false);
+  const [iwiscTenants, setIwiscTenants] = useState<IwiscTenant[]>([]);
+  const [iwiscTenantId, setIwiscTenantId] = useState("");
+  const [iwiscUserId, setIwiscUserId] = useState("");
+  const [iwiscTasks, setIwiscTasks] = useState<IwiscTask[]>([]);
+  const [iwiscTasksLoaded, setIwiscTasksLoaded] = useState(false);
+  const [selectedIwiscAntId, setSelectedIwiscAntId] = useState("");
+  const [iwiscTaskPage, setIwiscTaskPage] = useState(0);
+  const [newIwiscName, setNewIwiscName] = useState("");
+  const [newIwiscUrl, setNewIwiscUrl] = useState("");
+  const [newIwiscFormat, setNewIwiscFormat] = useState("coco");
+  const [newIwiscToken, setNewIwiscToken] = useState("");
   const [selectedId, setSelectedId] = useState("");
   const [canvasRevision, setCanvasRevision] = useState(0);
   const [detail, setDetail] = useState<{ item: Item; annotation: Annotation } | null>(null);
@@ -97,6 +108,21 @@ export default function App() {
     });
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    if (sourceMode !== "iwisc") return;
+    let active = true;
+    api.iwiscTenants().then(({ tenants }) => {
+      if (!active) return;
+      setIwiscTenants(tenants);
+      setIwiscTenantId((current) => tenants.some((tenant) => tenant.tenant_id === current)
+        ? current : tenants[0]?.tenant_id ?? "");
+      setError("");
+    }).catch((reason: unknown) => {
+      if (active) setError(shortError(reason));
+    });
+    return () => { active = false; };
+  }, [sourceMode]);
 
   useEffect(() => {
     if (!manifestId) {
@@ -238,21 +264,31 @@ export default function App() {
       const selectedRemote = remoteDatasets.find((item) => item.dataset_id === remoteDatasetId);
       const params = sourceMode === "local"
         ? { mode: "local", folder_path: folderPath, manifest_name: datasetName, recursive }
-        : {
+        : sourceMode === "remote"
+          ? {
             mode: "remote",
             service_url: remoteServiceUrl,
             dataset_id: remoteDatasetId,
             dataset_name: selectedRemote?.name ?? "",
             overwrite: overwriteRemote,
+          }
+          : {
+            mode: "iwisc",
+            tenant_id: iwiscTenantId,
+            ant_id: selectedIwiscAntId,
+            user_id: iwiscUserId.trim(),
           };
       const created = await api.createDataset(params);
       const result = await api.manifests();
       setManifests(result.manifests);
       setManifestId(created.manifest_id);
       setStage("workspace");
-      setNotice(`資料集已建立，共 ${created.item_count} 張圖片`);
+      setNotice(sourceMode === "iwisc"
+        ? `任務 ${created.iwisc_ant_id || selectedIwiscAntId} 已載入，共 ${created.item_count} 張圖片`
+        : `資料集已建立，共 ${created.item_count} 張圖片`);
       setFolderPath("");
       setDatasetName("");
+      setSelectedIwiscAntId("");
     } catch (reason) {
       setError(shortError(reason));
     } finally {
@@ -271,6 +307,58 @@ export default function App() {
     } catch (reason) {
       setRemoteDatasets([]);
       setRemoteDatasetId("");
+      setError(shortError(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function loadIwiscTasks() {
+    if (!iwiscTenantId) {
+      setError("請先選擇或新增外部系統連線。");
+      return;
+    }
+    if (!iwiscUserId.trim()) {
+      setError("請先填入您的使用者 ID。");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setIwiscTasksLoaded(false);
+    try {
+      const result = await api.iwiscTasks(iwiscTenantId);
+      setIwiscTasks(result.tasks);
+      setSelectedIwiscAntId("");
+      setIwiscTaskPage(0);
+      setIwiscTasksLoaded(true);
+      setNotice(result.tasks.length ? `已載入 ${result.tasks.length} 筆未完成任務` : "目前沒有可處理的外部任務");
+    } catch (reason) {
+      setIwiscTasks([]);
+      setError(shortError(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function registerIwiscTenant() {
+    setBusy(true);
+    setError("");
+    try {
+      const tenant = await api.registerIwiscTenant({
+        system_name: newIwiscName,
+        server_host_name: newIwiscUrl,
+        target_format: newIwiscFormat,
+        api_token: newIwiscToken,
+      });
+      setIwiscTenants((current) => [...current.filter((item) => item.tenant_id !== tenant.tenant_id), tenant]);
+      setIwiscTenantId(tenant.tenant_id);
+      setIwiscTasks([]);
+      setIwiscTasksLoaded(false);
+      setNewIwiscName("");
+      setNewIwiscUrl("");
+      setNewIwiscToken("");
+      setNotice(`已新增外部系統連線：${tenant.system_name}`);
+    } catch (reason) {
       setError(shortError(reason));
     } finally {
       setBusy(false);
@@ -472,26 +560,52 @@ export default function App() {
           <div className="page-heading"><div><p className="eyebrow">DATASET MANAGEMENT</p><h1>資料集與標籤</h1><p className="page-description">建立本機影像資料集，設定標注類別並檢視既有資料。</p></div><div className="heading-illustration">▦</div></div>
           <div className="subnav"><button className={panel === "source" ? "selected" : ""} onClick={() => setPanel("source")} type="button">資料來源</button><button className={panel === "labels" ? "selected" : ""} onClick={() => setPanel("labels")} type="button">標籤管理</button></div>
           {panel === "source" ? <div className="data-layout">
-            <section className="card source-card"><div className="card-title"><span className="card-icon mint">＋</span><div><h2>{sourceMode === "local" ? "新增本機資料集" : "從遠端 Service 載入資料集"}</h2><p>{sourceMode === "local" ? "選擇含有圖片的資料夾作為工作來源" : "先連線取得資料集清單，再下載選取的資料集"}</p></div></div>
+            <section className="card source-card"><div className="card-title"><span className="card-icon mint">＋</span><div><h2>{sourceMode === "local" ? "新增本機資料集" : sourceMode === "remote" ? "從遠端 Service 載入資料集" : "載入 iWISC 標註任務"}</h2><p>{sourceMode === "local" ? "選擇含有圖片的資料夾作為工作來源" : sourceMode === "remote" ? "先連線取得資料集清單，再下載選取的資料集" : "選擇外部系統與任務，認領後將影像載入本機工作區"}</p></div></div>
               <form onSubmit={createDataset} className="form-stack">
-                <label>來源類型<select aria-label="來源類型" value={sourceMode} onChange={(event) => { const value = event.target.value as "local" | "remote"; setSourceMode(value); setRemoteDatasets([]); setRemoteDatasetId(""); }}><option value="local">本機資料夾</option><option value="remote">遠端 Service</option></select></label>
+                <label>來源類型<select aria-label="來源類型" value={sourceMode} onChange={(event) => { const value = event.target.value as "local" | "remote" | "iwisc"; setSourceMode(value); setRemoteDatasets([]); setRemoteDatasetId(""); setIwiscTasks([]); setIwiscTasksLoaded(false); setSelectedIwiscAntId(""); }}><option value="local">本機資料夾</option><option value="remote">遠端 Service</option><option value="iwisc">iWISC 任務</option></select></label>
                 {sourceMode === "local" ? <>
                   <label>資料夾路徑<input value={folderPath} onChange={(event) => setFolderPath(event.target.value)} placeholder="例如：D:\\datasets\\inspection" required /></label>
                   <p className="field-help">圖片路徑只在本機服務中使用，不會傳送到外部伺服器。</p>
                   <label>資料集名稱<input value={datasetName} onChange={(event) => setDatasetName(event.target.value)} placeholder="留空時使用資料夾名稱" /></label>
                   <label className="checkbox-row"><input type="checkbox" checked={recursive} onChange={(event) => setRecursive(event.target.checked)} /><span>包含子資料夾</span></label>
                   <div className="supported-types"><span>支援格式</span><div>{["JPG", "PNG", "BMP", "WEBP", "TIFF"].map((item) => <b key={item}>{item}</b>)}</div></div>
-                </> : <>
+                </> : sourceMode === "remote" ? <>
                   <label>Service Base URL<input aria-label="Service Base URL" type="url" value={remoteServiceUrl} onChange={(event) => { setRemoteServiceUrl(event.target.value); setRemoteDatasets([]); setRemoteDatasetId(""); }} placeholder="http://api.internal:8080" required /></label>
                   <button className="secondary-button" type="button" onClick={() => void loadRemoteDatasets()} disabled={busy || !remoteServiceUrl.trim()}>載入資料集清單</button>
                   {remoteDatasets.length > 0 && <>
                     <label>遠端資料集<select aria-label="遠端資料集" value={remoteDatasetId} onChange={(event) => setRemoteDatasetId(event.target.value)}>{remoteDatasets.map((item) => <option key={item.dataset_id} value={item.dataset_id}>{item.name}（{item.item_count} 張）</option>)}</select></label>
                     <label className="checkbox-row"><input type="checkbox" checked={overwriteRemote} onChange={(event) => setOverwriteRemote(event.target.checked)} /><span>重新下載（覆蓋現有）</span></label>
                   </>}
+                </> : <>
+                  <label>外部系統<select aria-label="外部系統" value={iwiscTenantId} onChange={(event) => { setIwiscTenantId(event.target.value); setIwiscTasks([]); setIwiscTasksLoaded(false); setSelectedIwiscAntId(""); }}>{iwiscTenants.map((tenant) => <option key={tenant.tenant_id} value={tenant.tenant_id}>{tenant.system_name} · {tenant.target_format}{tenant.has_api_token ? " · 已設定金鑰" : ""}</option>)}</select></label>
+                  {iwiscTenants.length === 0 && <p className="field-help">尚無連線。請在下方新增外部系統設定。</p>}
+                  <label>您的使用者 ID（工號）<input aria-label="使用者 ID" value={iwiscUserId} onChange={(event) => setIwiscUserId(event.target.value)} placeholder="user001" /></label>
+                  <button className="secondary-button" type="button" onClick={() => void loadIwiscTasks()} disabled={busy || !iwiscTenantId || !iwiscUserId.trim()}>查看任務清單</button>
+                  {iwiscTasksLoaded && iwiscTasks.length === 0 && <p className="field-help">目前沒有可處理的任務。已完成任務不會列在這裡。</p>}
+                  {iwiscTasks.length > 0 && <>
+                    <div className="iwisc-task-list" data-testid="iwisc-task-list" aria-label="iWISC 任務清單">
+                      {iwiscTasks.slice(iwiscTaskPage * 50, (iwiscTaskPage + 1) * 50).map((task) => <button className={`iwisc-task ${selectedIwiscAntId === task.ant_id ? "selected" : ""}`} key={task.ant_id} type="button" data-testid={`iwisc-task-${task.ant_id}`} aria-pressed={selectedIwiscAntId === task.ant_id} onClick={() => setSelectedIwiscAntId(task.ant_id)}>
+                        <span className="iwisc-task-main"><strong>{task.ant_id}</strong><small>{task.ant_period ? `期間：${task.ant_period}` : ""}{Object.keys(task.external_context).length ? ` · ${Object.entries(task.external_context).map(([key, value]) => `${key}: ${value}`).join(" · ")}` : ""}</small></span>
+                        <span className={`iwisc-task-status ${task.ant_active === 1 ? "in-progress" : "pending"}`}>{task.ant_active === 1 ? "標注中" : "待認領"}</span>
+                        <span className="iwisc-task-action">{task.ant_active === 1 ? "繼續" : "選取"}</span>
+                      </button>)}
+                    </div>
+                    {iwiscTasks.length > 50 && <div className="iwisc-pagination"><button type="button" className="secondary-button" disabled={iwiscTaskPage === 0} onClick={() => setIwiscTaskPage((page) => Math.max(0, page - 1))}>上一頁</button><span>第 {iwiscTaskPage + 1} / {Math.ceil(iwiscTasks.length / 50)} 頁</span><button type="button" className="secondary-button" disabled={(iwiscTaskPage + 1) * 50 >= iwiscTasks.length} onClick={() => setIwiscTaskPage((page) => page + 1)}>下一頁</button></div>}
+                    <p className="field-help">已選任務：{selectedIwiscAntId || "尚未選取"}。僅受授權的使用者可認領受限制的任務。</p>
+                  </>}
+                  <details className="iwisc-connection">
+                    <summary>新增外部系統連線</summary>
+                    <label>連線別名<input aria-label="連線別名" value={newIwiscName} onChange={(event) => setNewIwiscName(event.target.value)} placeholder="AOI-Line-1" /></label>
+                    <label>Service 位址<input aria-label="iWISC Service 位址" type="url" value={newIwiscUrl} onChange={(event) => setNewIwiscUrl(event.target.value)} placeholder="http://aoi-server:8080" /></label>
+                    <label>標注結果格式<select aria-label="標注結果格式" value={newIwiscFormat} onChange={(event) => setNewIwiscFormat(event.target.value)}><option value="coco">COCO</option><option value="yolo-detection">YOLO detection</option><option value="labelme">LabelMe</option><option value="isat">ISAT</option></select></label>
+                    <label>API 金鑰（可留空）<input aria-label="iWISC API 金鑰" type="password" autoComplete="new-password" value={newIwiscToken} onChange={(event) => setNewIwiscToken(event.target.value)} placeholder="由 IT 提供" /></label>
+                    <button className="secondary-button" type="button" onClick={() => void registerIwiscTenant()} disabled={busy || !newIwiscName.trim() || !newIwiscUrl.trim()}>新增連線</button>
+                    <p className="field-help">金鑰只送到本機 API，並儲存在本機工作區的連線設定中。</p>
+                  </details>
                 </>}
-                <button className="primary-button" type="submit" disabled={busy || (sourceMode === "local" ? !folderPath.trim() : !remoteServiceUrl.trim() || !remoteDatasetId)}>{sourceMode === "local" ? "建立資料集並開始標注" : "下載資料集並開始標注"} <span>→</span></button>
+                <button className="primary-button" type="submit" disabled={busy || (sourceMode === "local" ? !folderPath.trim() : sourceMode === "remote" ? !remoteServiceUrl.trim() || !remoteDatasetId : !iwiscTenantId || !iwiscUserId.trim() || !selectedIwiscAntId)}>{sourceMode === "local" ? "建立資料集並開始標注" : sourceMode === "remote" ? "下載資料集並開始標注" : "認領任務並載入影像"} <span>→</span></button>
               </form>
-              <div className="source-note"><span>i</span><p>{sourceMode === "local" ? "圖片路徑只在本機服務中使用，不會傳送到外部伺服器。" : "遠端資料會下載至本機工作區，再由本機服務建立資料集。"} iWISC 任務來源仍列在相容性清單中。</p></div>
+              <div className="source-note"><span>i</span><p>{sourceMode === "local" ? "圖片路徑只在本機服務中使用，不會傳送到外部伺服器。" : sourceMode === "remote" ? "遠端資料會下載至本機工作區，再由本機服務建立資料集。" : "iWISC 只在後端連接外部系統；任務影像下載至本機工作區後再由 React 開啟。"}</p></div>
             </section>
             <section className="card manifest-card"><div className="section-title"><div><h2>最近使用</h2><p>選擇資料集以繼續工作</p></div><span className="count-pill">{manifests.length} 個資料集</span></div>
               {manifests.length === 0 ? <div className="empty-card"><span>▦</span><h3>還沒有資料集</h3><p>輸入本機資料夾路徑後建立第一個工作區。</p></div> : <div className="manifest-list">{manifests.map((item) => <button key={item.manifest_id} className={`manifest-row ${manifestId === item.manifest_id ? "current" : ""}`} onClick={() => { setManifestId(item.manifest_id); setStage("workspace"); }} type="button">

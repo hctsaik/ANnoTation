@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from plugins.labeling.domain.tools.contracts import RuntimeStatus, ToolDescriptor
-from plugins.labeling.domain.tools.registry import ToolRegistry, get_tool_registry, reset_tool_registry
+from domain.tools.contracts import RuntimeStatus, ToolDescriptor
+from domain.tools.registry import ToolRegistry, get_tool_registry, reset_tool_registry
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -95,8 +95,8 @@ def test_normalize_underscore() -> None:
 
 
 def test_list_labeling_tools_via_service(tmp_path) -> None:
-    from plugins.labeling.domain.services import AnnotationService
-    from plugins.labeling.domain.storage.workspace import AnnotationWorkspace
+    from domain.services import AnnotationService
+    from domain.storage.workspace import AnnotationWorkspace
     reset_tool_registry()
     svc = AnnotationService(AnnotationWorkspace(tmp_path / "ws"))
     tools = svc.list_labeling_tools()

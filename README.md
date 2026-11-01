@@ -6,10 +6,10 @@ model inference. The React app does not launch Streamlit. Legacy Streamlit pages
 remain in the source tree as migration references and are not part of this
 runtime.
 
-**Migration status:** local-folder and remote Service ingestion, the rectangle
-Canvas workflow, classification, review, and a COCO export path are implemented.
-The local workflow has a synthetic real-service browser journey. This branch is
-not release-complete: see the
+**Migration status:** local-folder and remote Service ingestion, synthetic HTTP
+iWISC task listing and claim, the rectangle Canvas workflow, classification,
+review, and a COCO export path are implemented. The local workflow has a
+synthetic real-service browser journey. This branch is not release-complete: see the
 [migration acceptance matrix](docs/react-migration-test-cases.md) for pending
 source modes, desktop integration, and end-to-end coverage.
 
@@ -83,6 +83,8 @@ executable when using another interpreter.
 - [External tool packaging](external-tools/README.md)
 - [Plugin asset manifest](plugin.manifest.yaml)
 
-The existing process modules are reused behind the local service boundary.
-The React runtime supports local folders and remote Service dataset downloads.
-iWISC task ingestion and a packaged native desktop host remain pending.
+The existing process modules are reused behind the local service boundary, and
+the connector contracts are owned by this repository so it can run independently
+of a NativeApp checkout. The React runtime supports local folders, remote Service
+dataset downloads, and synthetic iWISC listing and claim. Verification against a
+target iWISC service and a packaged native desktop host remain pending.

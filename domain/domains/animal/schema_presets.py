@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from plugins.labeling.domain.core.models import AttributeDef, LabelDef, LabelSchema
+from domain.core.models import AttributeDef, LabelDef, LabelSchema
 
 
 def animal_detection_schema(

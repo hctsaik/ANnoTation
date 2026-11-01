@@ -10,11 +10,11 @@ from urllib.parse import urlparse
 from urllib.request import urlopen
 from uuid import uuid4
 
-from plugins.labeling.domain.adapters.labeling_runtime import detect_labeling_tool, launch_labeling_project
-from plugins.labeling.domain.adapters.xanylabeling import XAnyLabelingProjectAdapter
-from plugins.labeling.domain.adapters.xanylabeling_runtime import detect_xanylabeling, launch_xanylabeling_project
-from plugins.labeling.domain.core.errors import ConflictError, NotFoundError, ValidationFailedError
-from plugins.labeling.domain.core.models import (
+from domain.adapters.labeling_runtime import detect_labeling_tool, launch_labeling_project
+from domain.adapters.xanylabeling import XAnyLabelingProjectAdapter
+from domain.adapters.xanylabeling_runtime import detect_xanylabeling, launch_xanylabeling_project
+from domain.core.errors import ConflictError, NotFoundError, ValidationFailedError
+from domain.core.models import (
     AdapterResult,
     Annotation,
     AnnotationSet,
@@ -29,12 +29,12 @@ from plugins.labeling.domain.core.models import (
     new_id,
     utc_now_iso,
 )
-from plugins.labeling.domain.core.states import apply_review_decision, transition_annotation_set
-from plugins.labeling.domain.core.validation import validate_annotation_set
-from plugins.labeling.domain.formats.registry import get_format_registry
-from core.integrations.connector import ExternalSystemConnector
-from plugins.labeling.domain.storage.workspace import AnnotationWorkspace
-from plugins.labeling.domain.tools.registry import get_tool_registry
+from domain.core.states import apply_review_decision, transition_annotation_set
+from domain.core.validation import validate_annotation_set
+from domain.formats.registry import get_format_registry
+from domain.integrations.contracts import ExternalSystemConnector
+from domain.storage.workspace import AnnotationWorkspace
+from domain.tools.registry import get_tool_registry
 
 
 def _new_uuid() -> str:
@@ -364,7 +364,7 @@ class AnnotationService:
     def _get_connector(self, tenant: SystemTenant) -> ExternalSystemConnector:
         # 宣告式選型：tenant.connector_type 優先，否則依 server_host_name scheme 推斷。
         # 新協定只需 register_connector("...", factory)，不必改這裡。
-        from plugins.labeling.domain.integrations.registry import build_connector
+        from domain.integrations.registry import build_connector
         return build_connector(tenant)
 
     # ── 舊版 API（FormatRegistry / dry-run 相容） ─────────────────────────────
@@ -556,7 +556,7 @@ class AnnotationService:
             assets = [a for a in assets if a.id in wanted]
         canonical = get_tool_registry().normalize(tool)
         if canonical == "isat":
-            from plugins.labeling.domain.adapters.isat import prepare_isat_project
+            from domain.adapters.isat import prepare_isat_project
             result = prepare_isat_project(dataset_id, schema, assets, Path(output_dir))
         else:
             result = XAnyLabelingProjectAdapter().prepare_project(dataset_id, schema, assets, Path(output_dir))
@@ -823,7 +823,7 @@ def _annotation_from_payload(payload: dict[str, Any]) -> Annotation:
         if geometry_type == "bbox":
             geometry = BBoxGeometry.from_dict(geometry_data)
         elif geometry_type == "polygon":
-            from plugins.labeling.domain.core.models import PolygonGeometry
+            from domain.core.models import PolygonGeometry
             geometry = PolygonGeometry.from_dict(geometry_data)
         else:
             raise ValueError(f"Unsupported geometry type: {geometry_type}")

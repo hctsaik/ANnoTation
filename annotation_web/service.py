@@ -23,6 +23,7 @@ IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff")
 EXPORT_FORMATS = {"coco_json", "yolo_txt", "pascal_voc", "imagefolder", "csv"}
 TOOLS = {"x-anylabeling", "labelme", "isat"}
 _ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+_EXTERNAL_TASK_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 
 
 class ServiceError(Exception):
@@ -154,7 +155,7 @@ class AnnotationService:
             {
                 "manifest_id": row["manifest_id"],
                 "name": row["name"],
-                "source_type": row["source_type"],
+                "source_type": "iwisc" if row["source_type"] == "iwsc" else row["source_type"],
                 "created_at": row["created_at"],
                 "item_count": row["item_count"],
             }
@@ -176,6 +177,24 @@ class AnnotationService:
                     "dataset_id": dataset_id,
                     "dataset_name": dataset_name,
                     "overwrite": bool(params.get("overwrite", False)),
+                }
+            )
+        elif mode == "iwisc":
+            tenant_id = str(params.get("tenant_id") or "").strip()
+            ant_id = str(params.get("ant_id") or "").strip()
+            user_id = str(params.get("user_id") or "").strip()
+            if not _ID_PATTERN.fullmatch(tenant_id):
+                raise ServiceError(400, "Choose a valid external system")
+            if not _EXTERNAL_TASK_ID_PATTERN.fullmatch(ant_id):
+                raise ServiceError(400, "Choose a valid external task")
+            if not user_id or len(user_id) > 128 or any(ord(char) < 32 for char in user_id):
+                raise ServiceError(400, "Enter a valid user ID before claiming this task")
+            result = self._process("026").execute_logic(
+                {
+                    "mode": "iwsc",
+                    "tenant_id": tenant_id,
+                    "ant_id": ant_id,
+                    "user_id": user_id,
                 }
             )
         elif mode == "local":
@@ -207,6 +226,8 @@ class AnnotationService:
             "manifest_id": result["manifest_id"],
             "name": result.get("manifest_name") or str(params.get("manifest_name") or params.get("dataset_name") or "Dataset"),
             "item_count": result.get("total_count", 0),
+            "source_type": "iwisc" if mode == "iwisc" else mode,
+            "iwisc_ant_id": result.get("iwsc_ant_id"),
             "yolo_seed": {
                 key: seed[key]
                 for key in ("applied", "classes", "reason")
@@ -239,6 +260,104 @@ class AnnotationService:
                 "item_count": item_count,
             })
         return datasets
+
+    def _iwisc_domain_service(self):
+        try:
+            return self._process("026")._get_service()
+        except Exception as exc:
+            raise ServiceError(500, "The local external-task workspace is not available") from exc
+
+    @staticmethod
+    def _public_iwisc_tenant(row: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "tenant_id": str(row.get("tenant_id") or ""),
+            "system_name": str(row.get("system_name") or ""),
+            "server_host_name": str(row.get("server_host_name") or ""),
+            "target_format": str(row.get("target_format") or ""),
+            "has_api_token": bool(row.get("api_token")),
+        }
+
+    def iwisc_tenants(self) -> list[dict[str, Any]]:
+        try:
+            rows = self._iwisc_domain_service().list_tenants()
+        except ServiceError:
+            raise
+        except Exception as exc:
+            raise ServiceError(502, "Could not load external system connections") from exc
+        return [self._public_iwisc_tenant(row) for row in rows]
+
+    def register_iwisc_tenant(self, params: dict[str, Any]) -> dict[str, Any]:
+        system_name = str(params.get("system_name") or "").strip()
+        server_host_name = self._remote_service_url(params.get("server_host_name"))
+        target_format = str(params.get("target_format") or "coco").strip().lower()
+        api_token = str(params.get("api_token") or "").strip()
+        if not system_name or len(system_name) > 120:
+            raise ServiceError(400, "Enter a connection name (up to 120 characters)")
+        if target_format not in {"coco", "yolo-detection", "labelme", "isat"}:
+            raise ServiceError(400, "Choose a supported annotation format")
+        if len(api_token) > 4096 or any(ord(char) < 32 for char in api_token):
+            raise ServiceError(400, "The API key is invalid")
+        try:
+            row = self._iwisc_domain_service().register_tenant(
+                system_name=system_name,
+                server_host_name=server_host_name,
+                target_format=target_format,
+                api_token=api_token or None,
+            )
+        except ServiceError:
+            raise
+        except Exception as exc:
+            raise ServiceError(500, "Could not save the external system connection") from exc
+        return self._public_iwisc_tenant(row)
+
+    @staticmethod
+    def _safe_external_context(value: Any) -> dict[str, str]:
+        if not isinstance(value, dict):
+            return {}
+        result: dict[str, str] = {}
+        for key, item in list(value.items())[:3]:
+            if isinstance(item, (str, int, float, bool)) or item is None:
+                rendered = str(item) if item is not None else ""
+            else:
+                rendered = json.dumps(item, ensure_ascii=False, default=str)
+            result[str(key)[:80]] = rendered[:200]
+        return result
+
+    def iwisc_tasks(self, tenant_id: str) -> list[dict[str, Any]]:
+        if not _ID_PATTERN.fullmatch(str(tenant_id or "")):
+            raise ServiceError(400, "Choose a valid external system")
+        service = self._iwisc_domain_service()
+        try:
+            rows = service.get_ant_list(tenant_id)
+        except Exception as exc:
+            raise ServiceError(502, f"Could not load external tasks: {exc}") from exc
+        try:
+            local_state = {
+                str(row.get("ant_id") or ""): int(row.get("ant_active", 0))
+                for row in service.list_tasks(tenant_id)
+            }
+        except Exception:
+            local_state = {}
+        tasks = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            ant_id = str(row.get("ant_id") or "").strip()
+            if not _EXTERNAL_TASK_ID_PATTERN.fullmatch(ant_id):
+                continue
+            try:
+                ant_active = local_state.get(ant_id, int(row.get("ant_active", 0)))
+            except (TypeError, ValueError):
+                ant_active = 0
+            if ant_active == 2:
+                continue
+            tasks.append({
+                "ant_id": ant_id,
+                "ant_active": ant_active,
+                "ant_period": str(row.get("ant_period") or ""),
+                "external_context": self._safe_external_context(row.get("external_context")),
+            })
+        return tasks
 
     def workspace(self, manifest_id: str, settings: dict[str, Any] | None = None) -> dict[str, Any]:
         self._manifest(manifest_id)

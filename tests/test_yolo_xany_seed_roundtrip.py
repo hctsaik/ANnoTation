@@ -15,7 +15,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from plugins.labeling.domain.yolo_xany_seed import seed_xany_json_from_yolo
+from domain.yolo_xany_seed import seed_xany_json_from_yolo
 
 _W, _H = 1920, 1080  # 非正方形：抓 percent↔pixel / w-h 對調
 

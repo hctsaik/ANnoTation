@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from plugins.labeling.domain.core.models import ArtifactRef, ConversionReport
-from plugins.labeling.domain.storage.artifacts import sha256_file
+from domain.core.models import ArtifactRef, ConversionReport
+from domain.storage.artifacts import sha256_file
 
 
 def write_json_artifact(path: Path, payload: dict, media_type: str = "application/json") -> ArtifactRef:

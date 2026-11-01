@@ -151,6 +151,13 @@ def make_handler(
                     service_url = query.get("service_url", [""])[0]
                     self._json(200, {"datasets": service.remote_datasets(service_url)})
                     return
+                if parts == ["api", "sources", "iwisc", "tenants"]:
+                    self._json(200, {"tenants": service.iwisc_tenants()})
+                    return
+                if parts == ["api", "sources", "iwisc", "tasks"]:
+                    tenant_id = query.get("tenant_id", [""])[0]
+                    self._json(200, {"tasks": service.iwisc_tasks(tenant_id)})
+                    return
                 if parts == ["api", "manifests"]:
                     self._json(200, {"manifests": service.list_manifests()})
                     return
@@ -191,6 +198,9 @@ def make_handler(
                 body = self._read_json()
                 if parts == ["api", "manifests"]:
                     self._json(201, service.create_dataset(body))
+                    return
+                if parts == ["api", "sources", "iwisc", "tenants"]:
+                    self._json(201, service.register_iwisc_tenant(body))
                     return
                 if parts == ["api", "workspace"]:
                     self._json(200, service.workspace(str(body.get("manifest_id") or ""), body))

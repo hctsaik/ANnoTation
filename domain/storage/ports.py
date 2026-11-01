@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Protocol
 
-from plugins.labeling.domain.core.models import (
+from domain.core.models import (
     AnnotationSet,
     ArtifactRef,
     Dataset,

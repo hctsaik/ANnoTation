@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from plugins.labeling.domain.core.models import AnnotationSet, Dataset, ImageAsset, LabelSchema
-from plugins.labeling.domain.storage.artifacts import LocalArtifactStore, sha256_file
-from plugins.labeling.domain.storage.sqlite_store import SQLiteMetadataStore
+from domain.core.models import AnnotationSet, Dataset, ImageAsset, LabelSchema
+from domain.storage.artifacts import LocalArtifactStore, sha256_file
+from domain.storage.sqlite_store import SQLiteMetadataStore
 
 
 class AnnotationWorkspace:

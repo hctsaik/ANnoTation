@@ -13,8 +13,8 @@ _ui_spec.loader.exec_module(_ui)
 
 
 def _get_service():
-    from plugins.labeling.domain.services import AnnotationService
-    from plugins.labeling.domain.storage.workspace import AnnotationWorkspace
+    from domain.services import AnnotationService
+    from domain.storage.workspace import AnnotationWorkspace
     ws_path = Path(os.environ.get("CIM_LOG_DIR", "/tmp")) / "annotation_workspace"
     return AnnotationService(AnnotationWorkspace(ws_path))
 

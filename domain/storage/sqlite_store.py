@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from plugins.labeling.domain.core.models import (
+from domain.core.models import (
     AnnotationSet,
     AnnotationTask,
     Dataset,

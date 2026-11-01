@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from plugins.labeling.domain.adapters.common import write_conversion_report
-from plugins.labeling.domain.core.models import (
+from domain.adapters.common import write_conversion_report
+from domain.core.models import (
     Annotation,
     AnnotationSet,
     AdapterResult,
@@ -15,7 +15,7 @@ from plugins.labeling.domain.core.models import (
     LabelSchema,
     PolygonGeometry,
 )
-from plugins.labeling.domain.storage.artifacts import sha256_file
+from domain.storage.artifacts import sha256_file
 
 
 def export_yolo_segmentation(

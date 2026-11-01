@@ -18,15 +18,19 @@ stop the service without embedding Streamlit.
   and keeps source image paths out of browser-facing item records.
 - `annotation_runtime/` owns standalone app data paths and the manifest database
   access required by the process modules.
+- `domain/integrations/` owns this app's external-task contracts, profile parsing,
+  and connector registry; the standalone React service does not import connector
+  internals from a NativeApp host checkout.
 - `modules/module_010`, `012`, `014`, `017`, `018`, and `026` continue to provide
   ingestion, workspace, export, label governance, review, and local-folder scan
   logic. Their UI widgets are not used by the React application.
 - `domain/tools/` provides the supported external labeling-tool adapters. A local
   YOLO model can be invoked through the same API boundary.
 
-The React runtime supports local folder datasets and remote Service downloads.
-iWISC task ingestion is not yet connected. The app does not require a cloud
-service for local work.
+The React runtime supports local folder datasets, remote Service downloads, and
+iWISC task listing and claim through the app-owned connector layer. The synthetic
+iWISC HTTP integration is covered locally; compatibility with the target service
+remains open. The app does not require a cloud service for local work.
 
 ## User workflow
 
@@ -51,6 +55,6 @@ evidence only; they do not establish React parity.
 The migration is not release-complete while any required parity row is pending or
 partial. The synthetic browser path now covers dataset creation, Canvas editing,
 classification, review, COCO export, and service restart/readback through the real
-local API. Remote Service ingestion has a local HTTP integration test; compatibility
-with the target Service, iWISC task handling, a native file-picker bridge, and
+local API. Remote Service and synthetic iWISC ingestion have local HTTP integration
+tests; compatibility with the target Service, a native file-picker bridge, and
 packaged Windows architecture validation remain open.

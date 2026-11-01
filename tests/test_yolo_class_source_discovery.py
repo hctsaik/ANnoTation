@@ -23,7 +23,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from plugins.labeling.domain.yolo_xany_seed import (
+from domain.yolo_xany_seed import (
     _max_label_id,
     _names_from_data_yaml,
     find_class_source,

@@ -4,8 +4,8 @@ import base64
 import json
 from typing import Any, Callable
 
-from plugins.labeling.domain.core.errors import AnnotationError
-from plugins.labeling.domain.services import AnnotationService
+from domain.core.errors import AnnotationError
+from domain.services import AnnotationService
 
 
 def ok(payload: Any) -> str:
