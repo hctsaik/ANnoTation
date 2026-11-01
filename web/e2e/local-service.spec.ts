@@ -120,6 +120,7 @@ test("runs a real local dataset through annotation, review, export, and restart"
   await page.getByRole("button", { name: "標籤管理" }).click();
   await page.getByLabel("框選標籤").fill("scratch");
   await page.getByLabel("整張圖片分類").fill("OK\nNG");
+  await page.getByLabel("外部標注工具").selectOption("labelme");
   await page.getByRole("button", { name: /保存工作區設定/ }).click();
   await expect(page.getByText("工作區設定已保存")).toBeVisible();
   await workflow.getByRole("button", { name: "標注工作台" }).click();
@@ -224,6 +225,10 @@ test("runs a real local dataset through annotation, review, export, and restart"
   await page.reload();
   await expect(page.getByRole("heading", { name: "標注工作台" })).toBeVisible();
   await expect(page.getByRole("button", { name: /panel-a\.png/ })).toBeVisible();
+  await workflow.getByRole("button", { name: "資料集" }).click();
+  await page.getByRole("button", { name: "標籤管理" }).click();
+  await expect(page.getByLabel("外部標注工具")).toHaveValue("labelme");
+  await workflow.getByRole("button", { name: "標注工作台" }).click();
   await page.getByRole("button", { name: /panel-a\.png/ }).click();
   await expect(page.getByLabel("第 1 個框選類別")).toBeVisible();
   await expect(page.getByLabel("分類結果")).toHaveValue("OK");
