@@ -1,0 +1,77 @@
+name: React migration checks
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: react-migration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-react-service-e2e:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11.9"
+          cache: pip
+          cache-dependency-path: requirements-web.txt
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.12.0"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install Python service and test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-web.txt pytest
+
+      - name: Run local-service and connector tests
+        run: >-
+          python -m pytest
+          tests/test_annotation_web_service.py
+          tests/annotation/test_configurable_rest_delivery.py
+          -q
+
+      - name: Install React dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Run React tests and production build
+        working-directory: web
+        run: |
+          npm test
+          npm run build
+
+      - name: Install Chromium for Playwright
+        working-directory: web
+        run: npx playwright install chromium
+
+      - name: Run real local-service browser journeys
+        working-directory: web
+        run: |
+          $env:ANNOTATION_PYTHON = (Get-Command python).Source
+          npm run e2e
+
+      - name: Upload Playwright failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: annotation-playwright-failures
+          path: web/test-results/
+          if-no-files-found: ignore

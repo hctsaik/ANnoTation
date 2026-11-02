@@ -11,13 +11,15 @@ The React branch has a working local-folder workflow and a first Canvas editor.
 legacy scenario has passed end-to-end. Release parity remains open while a row is
 partial or pending.
 
-Latest focused validation (2026-11-02): 24 Vitest tests, 8 Playwright tests
+Latest focused validation (2026-11-02): 24 Vitest tests, 9 Playwright tests
 (including real local-folder and configured synthetic iWISC → React → Python
-service result delivery), 56 Python tests across the configurable result
-connector, web service, legacy REST connector, and domain services, and a
-production Vite build pass. The broader 183 Python tests under `tests/` also
-passed in the preceding validation run. Full pytest collection currently stops because two legacy module
-tests expect `C:\code\claude\scripts\shared\_manifest_db.py` outside this checkout.
+service result delivery), 24 Python tests across the web service and configurable
+result connector, and a production Vite build pass. The broader 183 Python tests
+under `tests/` also passed in the preceding validation run. A Windows GitHub
+Actions workflow now repeats the focused Python, React, build, and browser gates;
+its first hosted run is pending. Full pytest collection currently stops because
+two legacy module tests expect `C:\code\claude\scripts\shared\_manifest_db.py`
+outside this checkout.
 The Tauri dev host launched on this Windows ARM64 machine as an x86_64 build; its
 loopback service returned a session token on a dynamic port and exited with the
 host. Native picker UI inspection, packaged host, native ARM64, target-Service,
