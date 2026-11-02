@@ -148,6 +148,28 @@ def test_local_dataset_scans_supported_formats_recursively_or_root_only(
     assert {path: hashlib.sha256(path.read_bytes()).hexdigest() for path in source_files} == source_hashes
 
 
+def test_tiff_browser_preview_is_png_and_preserves_source(tmp_path: Path):
+    source = tmp_path / "tiff-preview"
+    source.mkdir()
+    tiff_path = source / "panel.tiff"
+    Image.new("RGB", (16, 12), "#335577").save(tiff_path, format="TIFF")
+    source_hash = hashlib.sha256(tiff_path.read_bytes()).hexdigest()
+    service = AnnotationService(tmp_path / "tiff-preview-app-data")
+    created = service.create_dataset({
+        "folder_path": str(source), "manifest_name": "TIFF browser preview", "recursive": True,
+    })
+    item = manifest_db.get_manifest_items(service.db_path, created["manifest_id"])[0]
+
+    image_bytes, content_type = service.image(created["manifest_id"], item["item_id"])
+
+    assert content_type == "image/png"
+    assert image_bytes.startswith(b"\x89PNG\r\n\x1a\n")
+    with Image.open(io.BytesIO(image_bytes)) as preview:
+        assert preview.format == "PNG"
+        assert preview.size == (16, 12)
+    assert hashlib.sha256(tiff_path.read_bytes()).hexdigest() == source_hash
+
+
 def test_iwisc_result_delivery_registration_is_opt_in_and_redacted(service_and_dataset):
     service, _source, _created = service_and_dataset
     connection = service.register_iwisc_tenant({

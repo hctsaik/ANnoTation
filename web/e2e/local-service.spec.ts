@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { createHash } from "node:crypto";
 import { spawn, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -301,6 +301,75 @@ test("runs a real local dataset through annotation, review, export, and restart"
   await page.getByRole("button", { name: /panel-a\.png/ }).click();
   await expect(page.getByLabel("分類結果")).toHaveValue("");
   await expect(page.getByRole("button", { name: /panel-a\.png/ })).not.toContainText("OK");
+});
+
+test("renders every supported local image format and honors recursive scanning", async ({ page }) => {
+  test.setTimeout(60_000);
+  temporaryRoot = await mkdtemp(join(tmpdir(), "annotation-format-matrix-e2e-"));
+  temporaryRoots.push(temporaryRoot);
+  appDataDir = join(temporaryRoot, "app data");
+  sourceDir = join(temporaryRoot, "format dataset");
+  const fixtureDir = join(E2E_DIR, "fixtures", "image-format-matrix");
+  await cp(fixtureDir, sourceDir, { recursive: true });
+  const fileNames = [
+    "root-0.jpg",
+    "root-1.jpeg",
+    "root-2.png",
+    "root-3.bmp",
+    "root-4.webp",
+    "root-5.tif",
+    "root-6.tiff",
+    "UPPER.PNG",
+    join("nested", "nested.jpeg"),
+    "ignore.gif",
+    "notes.txt",
+  ];
+  const originalHashes = new Map(
+    await Promise.all(fileNames.map(async (name) => [
+      name,
+      createHash("sha256").update(await readFile(join(sourceDir, name))).digest("hex"),
+    ] as const)),
+  );
+  servicePort = await freeLoopbackPort();
+  serviceProcess = await startLocalService();
+  await page.goto(`http://127.0.0.1:${servicePort}`);
+  const workflow = page.getByRole("navigation", { name: "工作流程" });
+  await workflow.getByRole("button", { name: "資料集" }).click();
+  await page.getByLabel("資料夾路徑").fill(sourceDir);
+  await page.getByLabel("資料集名稱").fill("Recursive image format matrix");
+  await page.getByRole("checkbox", { name: "包含子資料夾" }).check();
+  await page.getByRole("button", { name: /建立資料集並開始標注/ }).click();
+
+  await expect(page.getByRole("heading", { name: "標注工作台" })).toBeVisible();
+  await expect(page.locator(".top-count")).toContainText("9 張圖片");
+  for (const name of fileNames.slice(0, 9)) {
+    const displayName = name.split(/[\\/]/).pop() ?? name;
+    const button = page.getByRole("button", { name: new RegExp(displayName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")) });
+    await expect(button).toBeVisible();
+    await button.click();
+    const canvas = page.getByLabel("圖片與標注框");
+    await expect(canvas).toBeVisible();
+    await expect.poll(() => canvas.evaluate((element: HTMLCanvasElement) => [element.width, element.height])).toEqual([16, 12]);
+  }
+  await expect(page.getByRole("button", { name: /ignore\.gif/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /notes\.txt/ })).toHaveCount(0);
+  for (const name of fileNames) {
+    expect(createHash("sha256").update(await readFile(join(sourceDir, name))).digest("hex")).toBe(originalHashes.get(name));
+  }
+
+  await workflow.getByRole("button", { name: "資料集" }).click();
+  await page.getByLabel("資料夾路徑").fill(sourceDir);
+  await page.getByLabel("資料集名稱").fill("Root-only image format matrix");
+  await page.getByRole("checkbox", { name: "包含子資料夾" }).uncheck();
+  await page.getByRole("button", { name: /建立資料集並開始標注/ }).click();
+  await expect(page.getByRole("heading", { name: "標注工作台" })).toBeVisible();
+  await expect(page.locator(".top-count")).toContainText("8 張圖片");
+  await expect(page.getByRole("button", { name: /root-0\.jpg/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /UPPER\.PNG/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /nested\.jpeg/ })).toHaveCount(0);
+  for (const name of fileNames) {
+    expect(createHash("sha256").update(await readFile(join(sourceDir, name))).digest("hex")).toBe(originalHashes.get(name));
+  }
 });
 
 test("previews label merge impact before the real service rewrites sidecars", async ({ page }) => {

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 import math
 import mimetypes
@@ -14,6 +15,8 @@ from types import ModuleType
 from typing import Any
 from urllib.parse import urlparse
 from uuid import uuid4
+
+from PIL import Image
 
 from annotation_runtime import data_root
 from annotation_runtime import _manifest_db as manifest_db
@@ -635,6 +638,15 @@ class AnnotationService:
     def image(self, manifest_id: str, item_id: str) -> tuple[bytes, str]:
         manifest, item = self._raw_item(manifest_id, item_id)
         path = self._local_item_path(manifest, item)
+        if path.suffix.lower() in {".tif", ".tiff"}:
+            preview = io.BytesIO()
+            try:
+                with Image.open(path) as source:
+                    source.seek(0)
+                    source.convert("RGB").save(preview, format="PNG")
+            except (OSError, ValueError, Image.DecompressionBombError) as exc:
+                raise ServiceError(422, "The selected image could not be previewed") from exc
+            return preview.getvalue(), "image/png"
         content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
         return path.read_bytes(), content_type
 
