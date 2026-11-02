@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getApiBase, isDesktopHost, pickDirectory, pickExecutable, pickModelFile } from "./host";
+import { getApiBase, isDesktopHost, isNativeAppHost, pickDirectory, pickExecutable, pickModelFile, supportsNativeFolderPicker } from "./host";
 
 const mocks = vi.hoisted(() => ({
   invoke: vi.fn(),
@@ -14,10 +14,21 @@ function setDesktopHost(enabled: boolean) {
   else Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
 }
 
+function setNativeAppHost(chooseFile?: (options: { properties: string[] }) => Promise<unknown>) {
+  if (!chooseFile) {
+    Reflect.deleteProperty(window, "NATIVEAPP_LOCAL_API");
+    Reflect.deleteProperty(window, "cimHost");
+    return;
+  }
+  Object.defineProperty(window, "NATIVEAPP_LOCAL_API", { configurable: true, value: "" });
+  Object.defineProperty(window, "cimHost", { configurable: true, value: { chooseFile } });
+}
+
 describe("desktop host bridge", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     setDesktopHost(false);
+    setNativeAppHost();
   });
 
   it("keeps the browser on the configured API base and does not invoke Tauri", async () => {
@@ -54,5 +65,18 @@ describe("desktop host bridge", () => {
       defaultPath: undefined,
       filters: [{ name: "Applications", extensions: ["exe"] }],
     });
+  });
+
+  it("uses the public same-origin API and folder picker in NativeApp", async () => {
+    const chooseFile = vi.fn().mockResolvedValue({ canceled: false, paths: ["D:\\datasets\\inspection"] });
+    setNativeAppHost(chooseFile);
+
+    expect(isNativeAppHost()).toBe(true);
+    expect(supportsNativeFolderPicker()).toBe(true);
+    expect(await getApiBase()).toBe("");
+    expect(await pickDirectory()).toBe("D:\\datasets\\inspection");
+    expect(chooseFile).toHaveBeenCalledWith({ properties: ["openDirectory"] });
+    expect(mocks.invoke).not.toHaveBeenCalled();
+    expect(mocks.open).not.toHaveBeenCalled();
   });
 });

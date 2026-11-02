@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   },
   loadImageUrl: vi.fn(),
   desktopHost: false,
+  nativeAppHost: false,
   pickDirectory: vi.fn(),
   pickExecutable: vi.fn(),
   pickModelFile: vi.fn(),
@@ -34,6 +35,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock("./api", () => ({ api: mocks.api, loadImageUrl: mocks.loadImageUrl }));
 vi.mock("./host", () => ({
   isDesktopHost: () => mocks.desktopHost,
+  isNativeAppHost: () => mocks.nativeAppHost,
+  supportsNativeFolderPicker: () => mocks.desktopHost || mocks.nativeAppHost,
   pickDirectory: mocks.pickDirectory,
   pickExecutable: mocks.pickExecutable,
   pickModelFile: mocks.pickModelFile,
@@ -48,6 +51,7 @@ describe("ANnoTation workflow shell", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.desktopHost = false;
+    mocks.nativeAppHost = false;
     localStorage.clear();
     mocks.api.manifests.mockResolvedValue({ manifests: [manifest] });
     mocks.api.workspace.mockResolvedValue(workspace);
@@ -123,6 +127,26 @@ describe("ANnoTation workflow shell", () => {
     fireEvent.click(stages.getByRole("button", { name: /匯出/ }));
     fireEvent.click(screen.getByRole("button", { name: "選擇匯出資料夾…" }));
     await waitFor(() => expect(screen.getByRole("textbox", { name: "資料夾路徑" })).toHaveValue("D:\\exports\\inspection"));
+  });
+
+  it("uses the NativeApp bridge for dataset and export folders only", async () => {
+    mocks.nativeAppHost = true;
+    mocks.pickDirectory.mockResolvedValueOnce("D:\\datasets\\inspection").mockResolvedValueOnce("D:\\exports\\inspection");
+    render(<App />);
+    await screen.findByRole("heading", { name: "標注工作台" });
+    const stages = within(screen.getByRole("navigation", { name: "工作流程" }));
+
+    fireEvent.click(stages.getByRole("button", { name: /資料集/ }));
+    fireEvent.click(screen.getByRole("button", { name: "選擇影像資料夾…" }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "資料夾路徑" })).toHaveValue("D:\\datasets\\inspection"));
+
+    fireEvent.click(stages.getByRole("button", { name: /匯出/ }));
+    fireEvent.click(screen.getByRole("button", { name: "選擇匯出資料夾…" }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "資料夾路徑" })).toHaveValue("D:\\exports\\inspection"));
+
+    fireEvent.click(stages.getByRole("button", { name: /標注工作台/ }));
+    expect(screen.queryByRole("button", { name: "選擇模型檔案…" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "選擇工具執行檔…" })).not.toBeInTheDocument();
   });
 
   it("runs dataset pre-labeling in 500-image batches and aggregates the results", async () => {

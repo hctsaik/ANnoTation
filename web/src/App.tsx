@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { AnnotationCanvas } from "./AnnotationCanvas";
 import { api, loadImageUrl } from "./api";
-import { isDesktopHost, pickDirectory, pickExecutable, pickModelFile } from "./host";
+import { isDesktopHost, isNativeAppHost, pickDirectory, pickExecutable, pickModelFile } from "./host";
 import { filterItems } from "./annotationModel";
 import type { Annotation, ExportResult, IwiscTask, IwiscTenant, Item, LabelAnalysis, Manifest, RemoteDataset, Stage, Workspace } from "./types";
 
@@ -36,6 +36,7 @@ function shortError(error: unknown) {
 
 export default function App() {
   const desktopHost = isDesktopHost();
+  const folderPickerHost = desktopHost || isNativeAppHost();
   const [manifests, setManifests] = useState<Manifest[]>([]);
   const [manifestId, setManifestId] = useState("");
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
@@ -681,7 +682,7 @@ export default function App() {
                 <label>來源類型<select aria-label="來源類型" value={sourceMode} onChange={(event) => { const value = event.target.value as "local" | "remote" | "iwisc"; setSourceMode(value); setRemoteDatasets([]); setRemoteDatasetId(""); setIwiscTasks([]); setIwiscTasksLoaded(false); setSelectedIwiscAntId(""); }}><option value="local">本機資料夾</option><option value="remote">遠端 Service</option><option value="iwisc">iWISC 任務</option></select></label>
                 {sourceMode === "local" ? <>
                   <label>資料夾路徑<input value={folderPath} onChange={(event) => setFolderPath(event.target.value)} placeholder="例如：D:\\datasets\\inspection" required /></label>
-                  {desktopHost && <button className="secondary-button" type="button" onClick={() => void choosePath("dataset")}>選擇影像資料夾…</button>}
+                  {folderPickerHost && <button className="secondary-button" type="button" onClick={() => void choosePath("dataset")}>選擇影像資料夾…</button>}
                   <p className="field-help">圖片路徑只在本機服務中使用，不會傳送到外部伺服器。</p>
                   <label>資料集名稱<input value={datasetName} onChange={(event) => setDatasetName(event.target.value)} placeholder="留空時使用資料夾名稱" /></label>
                   <label className="checkbox-row"><input type="checkbox" checked={recursive} onChange={(event) => setRecursive(event.target.checked)} /><span>包含子資料夾</span></label>
@@ -835,7 +836,7 @@ export default function App() {
               <section className="card format-card"><div className="section-title"><div><h2>輸出格式</h2><p>可同時選擇多種格式</p></div></div><div className="format-grid">{FORMATS.map(([id, title, description]) => <label className={`format-option ${exportFormats.includes(id) ? "selected" : ""}`} key={id}><input type="checkbox" checked={exportFormats.includes(id)} onChange={() => toggleFormat(id)} /><span className="format-check">✓</span><span className="format-copy"><strong>{title}</strong><small>{description}</small></span><span className="format-symbol">{id === "csv" ? "▤" : id === "imagefolder" ? "▧" : "{ }"}</span></label>)}</div>
                 <div className="split-settings"><label className="checkbox-row"><input type="checkbox" checked={enableSplit} onChange={(event) => setEnableSplit(event.target.checked)} /><span>啟用 Train / Val / Test 分割</span></label>{enableSplit && <div className="split-fields">{(["train", "val", "test"] as const).map((key) => <label key={key}>{key.toUpperCase()} (%)<input type="number" min="0" max="100" value={split[key]} onChange={(event) => setSplit((current) => ({ ...current, [key]: Number(event.target.value) }))} /></label>)}<label className="checkbox-row"><input type="checkbox" checked={split.stratified} onChange={(event) => setSplit((current) => ({ ...current, stratified: event.target.checked }))} /><span>依分類分層</span></label><small>目前合計：{split.train + split.val + split.test}%（匯出時會正規化）</small></div>}</div>
               </section>
-              <section className="card destination-card"><div className="section-title"><div><h2>輸出位置</h2><p>選擇本機資料夾，匯出檔案不會離開此裝置</p></div></div><label className="field-label">資料夾路徑<input value={exportDir} onChange={(event) => setExportDir(event.target.value)} placeholder="例如：D:\\exports\\inspection-v1" /></label>{desktopHost && <button className="secondary-button" type="button" onClick={() => void choosePath("export")}>選擇匯出資料夾…</button>}<button className="primary-button export-button" onClick={() => void exportDataset()} disabled={busy || !manifestId}>檢查並開始匯出 <span>→</span></button></section>
+              <section className="card destination-card"><div className="section-title"><div><h2>輸出位置</h2><p>選擇本機資料夾，匯出檔案不會離開此裝置</p></div></div><label className="field-label">資料夾路徑<input value={exportDir} onChange={(event) => setExportDir(event.target.value)} placeholder="例如：D:\\exports\\inspection-v1" /></label>{folderPickerHost && <button className="secondary-button" type="button" onClick={() => void choosePath("export")}>選擇匯出資料夾…</button>}<button className="primary-button export-button" onClick={() => void exportDataset()} disabled={busy || !manifestId}>檢查並開始匯出 <span>→</span></button></section>
               {exportResult && <section className={`card export-result ${exportResult.mode === "done" ? "done" : "blocked"}`}><div className="section-title"><div><h2>{exportResult.mode === "done" ? "匯出完成" : "匯出檢查結果"}</h2><p>{exportResult.error ?? `${exportResult.annotated_items ?? 0} / ${exportResult.total_items ?? 0} 張圖片已處理`}</p></div><span>{exportResult.mode === "done" ? "✓" : "!"}</span></div>{exportResult.validation_issues?.length ? <div className="validation-list">{exportResult.validation_issues.slice(0, 30).map((issue, index) => <p className={`validation-issue ${issue.severity}`} key={`${issue.code}-${issue.item_id}-${index}`}><span>{issue.severity === "error" ? "×" : issue.severity === "warning" ? "!" : "i"}</span>{issue.message}</p>)}</div> : null}</section>}
             </div>
             <aside className="card export-aside"><span className="export-aside-icon">◈</span><p className="eyebrow">DATASET SUMMARY</p><h2>{currentManifest?.name}</h2><div className="summary-row"><span>影像總數</span><strong>{imageCount}</strong></div><div className="summary-row"><span>已標注影像</span><strong>{imageCount - (workspace?.pending ?? imageCount)}</strong></div><div className="summary-row"><span>已審核</span><strong>{approvedCount}</strong></div><div className="summary-row"><span>分類影像</span><strong>{allItems.filter((item) => item.has_classification).length}</strong></div><div className="aside-divider" /><h3>最近匯出</h3>{exportHistory.length ? exportHistory.slice(0, 5).map((item) => <div className="history-row" key={item.export_id}><span>▤</span><div><strong>{item.format}</strong><small>{item.item_count} 筆 · {item.created_at}</small></div></div>) : <p className="muted small">尚無匯出記錄</p>}</aside>

@@ -49,8 +49,12 @@ npm run dev
 ```
 
 Vite proxies API requests to the local Python service. Browser mode accepts paths
-as text. The Tauri development host also exposes native folder and file pickers
-and starts the loopback Python service:
+as text. The Tauri development host exposes native folder and file pickers and
+starts the loopback Python service. In a NativeApp public web host, React uses
+same-origin `/api` requests and `cimHost.chooseFile` for local dataset and export
+folders; model and executable file pickers remain Tauri-only. A browser journey
+with the injected NativeApp folder-picker contract and real Python service now
+covers local dataset creation, but does not verify a packaged NativeApp host:
 
 ```powershell
 py -3.11-64 -m pip install -r requirements-web.txt

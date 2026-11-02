@@ -11,9 +11,15 @@ The React branch has a working local-folder workflow and a first Canvas editor.
 legacy scenario has passed end-to-end. Release parity remains open while a row is
 partial or pending.
 
-Latest full local checks (2026-11-02): 26 Vitest tests, 10 Playwright tests,
-25 Python tests across the web service and configurable result connector, and
-the production Vite build pass. The broader 183 Python tests under `tests/`
+Latest React/browser checks (2026-11-02): 28 Vitest tests, 11 Playwright tests,
+and the production Vite build pass. The new NativeApp-folder-picker journey uses
+an injected `cimHost` contract and the real Python service; it does not represent
+a packaged NativeApp host. In the current environment 14 Python web-service
+tests pass when the remote-download case is deselected; the full service/REST
+connector command cannot complete because the configured Python launcher target
+is missing and the available SegVision environment lacks `requests` and `respx`.
+An earlier full local check passed 25 Python tests across the web service and
+configurable result connector. The broader 183 Python tests under `tests/`
 also passed in the preceding validation run. Windows GitHub Actions passed the
 then-current service, React, build, and 10-browser-test gates for commit
 `0d38efc` in [hosted run 41395589408](https://github.com/hctsaik/ANnoTation/actions/runs/41395589408).
@@ -23,7 +29,7 @@ selected image detail is ready, with unit and browser regression coverage. The
 run for `e0b8707` then exposed the same stale-detail race in image classification:
 the selection could revert after a clear. Classification controls now wait for
 the selected detail and the save handler checks that detail before writing. The
-26-test Vitest suite, production build, and 10-test Playwright suite pass locally.
+updated Vitest suite, production build, and browser suite pass locally.
 The follow-up Windows run for `fe29ce5` passed the service, React, build, and
 browser gates in [hosted run 41396950460](https://github.com/hctsaik/ANnoTation/actions/runs/41396950460).
 Remote Service downloads use runtime `requests`; iWISC and configurable REST
@@ -44,9 +50,10 @@ performed.
 The Tauri dev host launched on this Windows ARM64 machine as an x86_64 build; its
 loopback service returned a session token on a dynamic port and exited with the
 host. The installed NSIS host now has process-level evidence for bundled-service
-launch and cleanup after abrupt host termination. Native picker UI inspection,
-a complete packaged desktop journey, graceful window-close interaction, native
-ARM64, target-Service, and real-model checks remain pending.
+launch and cleanup after abrupt host termination. The synthetic NativeApp
+`cimHost` browser journey now covers folder selection and same-origin API calls;
+OS picker inspection, a complete packaged host journey, graceful window-close
+interaction, native ARM64, target-Service, and real-model checks remain pending.
 
 | ID | Existing behavior to preserve | React implementation | Evidence and remaining work | Status |
 |---|---|---|---|---|
@@ -65,7 +72,7 @@ ARM64, target-Service, and real-model checks remain pending.
 | REVIEW-01 | Filter the QA queue and persist approve/reject status and comments | Review stage records per-image status and comment; review confirmation is stored in browser local storage | The real-service browser journey saves both an approval and a rejection with comments, restarts the service, filters for rejected items, and verifies the rejected status and comment in React | Implemented; local approve/reject persistence journey passes; CI and packaged-host evidence pending |
 | EXPORT-01 | Select COCO, YOLO, VOC, ImageFolder, or CSV; optionally split data; block unsafe export | React export panel checks completion, partial-export opt-in, review confirmation, and module 014 validation | The real-service browser journey selects all five formats with a 100/0/0 split and checks COCO boxes, YOLO labels, VOC XML/index, ImageFolder copy, CSV split/label values, and all five history records after service restart; an invalid Windows output path reports this attempt's error while retaining the prior successful history | Implemented; local multi-format, split, and path-failure journeys pass; CI and other split-ratio evidence pending |
 | LOCAL-01 | Keep local data inside the app boundary and reject unrelated image paths | Loopback API uses a session token, checks browser origin, and applies the dataset folder grant | Python service/API tests check token, origin, and path grant | Implemented; tests pass locally |
-| HOST-01 | Open the app as a native desktop window with local file/folder pickers and controlled sidecar lifecycle | Tauri development host starts the source Python service; release mode launches the bundled Windows x64 service resource and exposes native directory/model/tool pickers | The locked service smoke verifies React delivery, local ingestion, annotation persistence, new-process readback, and service exit when its parent terminates. A 16.37 MiB current-user NSIS candidate built; the installed Tauri process launched `annotation-service.exe` from the installer resource directory with its PID, and the service exited after the host was force-terminated. Full packaged UI/data flow, native picker interaction, graceful worker shutdown through user window close, and native ARM64 remain unverified | Partial; packaged launch and abrupt-host cleanup are verified, end-to-end desktop parity remains open |
+| HOST-01 | Open the app as a native desktop window with local file/folder pickers and controlled sidecar lifecycle | Tauri development host starts the source Python service; release mode launches the bundled Windows x64 service resource and exposes native directory/model/tool pickers. NativeApp public web host uses same-origin `/api` and `cimHost.chooseFile` for dataset/export folders | The locked service smoke verifies React delivery, local ingestion, annotation persistence, new-process readback, and service exit when its parent terminates. A synthetic `cimHost` browser journey opens a local dataset through the same-origin API and real Python service. A 16.37 MiB current-user NSIS candidate built; the installed Tauri process launched `annotation-service.exe` from the installer resource directory with its PID, and the service exited after the host was force-terminated. Packaged NativeApp host flow, model/executable pickers, OS picker interaction, graceful window-close cleanup, and native ARM64 remain unverified | Partial; host contract and packaged launch have local evidence, complete NativeApp/desktop parity remains open |
 
 ## Required gates before claiming parity
 

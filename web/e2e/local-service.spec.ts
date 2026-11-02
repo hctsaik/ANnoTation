@@ -662,6 +662,44 @@ test("imports and edits an LV SHA-addressed handoff through React", async ({ pag
   expect(savedAfterRestart.shapes[0].points).toEqual(savedBeforeRestart.shapes[0].points);
 });
 
+test("opens a local dataset through the NativeApp same-origin folder bridge", async ({ page }) => {
+  test.setTimeout(40_000);
+  temporaryRoot = await mkdtemp(join(tmpdir(), "annotation-nativeapp-picker-e2e-"));
+  temporaryRoots.push(temporaryRoot);
+  appDataDir = join(temporaryRoot, "app data");
+  sourceDir = join(temporaryRoot, "選取的資料集");
+  await mkdir(sourceDir, { recursive: true });
+  await writeFile(join(sourceDir, "nativeapp-image.png"), PNG_FIXTURE);
+  servicePort = await freeLoopbackPort();
+  serviceProcess = await startLocalService();
+  const origin = `http://127.0.0.1:${servicePort}`;
+  const apiRequests: string[] = [];
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname.startsWith("/api/")) apiRequests.push(request.url());
+  });
+  await page.addInitScript((selectedPath: string) => {
+    Object.defineProperty(window, "NATIVEAPP_LOCAL_API", { configurable: true, value: "" });
+    Object.defineProperty(window, "cimHost", {
+      configurable: true,
+      value: { chooseFile: async () => ({ canceled: false, paths: [selectedPath] }) },
+    });
+  }, sourceDir);
+
+  await page.goto(origin);
+  const workflow = page.getByRole("navigation", { name: "工作流程" });
+  await workflow.getByRole("button", { name: "資料集" }).click();
+  await page.getByRole("button", { name: "選擇影像資料夾…" }).click();
+  await expect(page.getByLabel("資料夾路徑")).toHaveValue(sourceDir);
+  await page.getByLabel("資料集名稱").fill("NativeApp local dataset");
+  await page.getByRole("button", { name: /建立資料集並開始標注/ }).click();
+
+  await expect(page.getByRole("heading", { name: "標注工作台" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /nativeapp-image\.png/ })).toBeVisible();
+  expect(apiRequests.length).toBeGreaterThan(0);
+  expect(apiRequests.every((url) => url.startsWith(`${origin}/api/`))).toBe(true);
+  expect(new Set(apiRequests.map((url) => new URL(url).origin))).toEqual(new Set([origin]));
+});
+
 test.afterAll(async () => {
   await stopLocalService();
   for (const root of temporaryRoots) await rm(root, { recursive: true, force: true });

@@ -51,8 +51,12 @@ The app is usable in a browser during development. The Tauri development host
 loads the same React source, starts the local Python API on a dynamic loopback
 port, passes that API base to React, and stops the service when the desktop
 process exits. Tauri's native dialogs supply paths for local image folders,
-export folders, YOLO model files, and optional external tools. Browser mode keeps
-its Vite proxy and direct path fields.
+export folders, YOLO model files, and optional external tools. A NativeApp public
+web host uses same-origin `/api` and `cimHost.chooseFile` for dataset/export
+folders; its model-file and external-tool pickers are not implemented. The
+synthetic NativeApp bridge browser case exercises the React host contract and
+real local API service, not a packaged NativeApp host. Browser mode keeps its
+Vite proxy and direct path fields.
 
 The Windows NSIS bundle now includes the locked x64 Python service package under
 `annotation-service/`. Release-mode Tauri starts that resource executable and
@@ -82,5 +86,6 @@ result delivery, local completion, and read-only state through the real local AP
 and a synthetic external HTTP service. An unconfigured REST connection remains
 unsupported. Target-Service delivery and packaged Windows architecture validation
 remain open. Native picker behavior
-is implemented in the development host; packaged host lifecycle remains
-unverified.
+is implemented in the Tauri development host and the NativeApp folder bridge;
+the latter has a synthetic folder-picker browser journey. Packaged NativeApp host
+lifecycle remains unverified.

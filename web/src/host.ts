@@ -5,7 +5,21 @@ export function isDesktopHost(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
+export function isNativeAppHost(): boolean {
+  if (typeof window === "undefined") return false;
+  const hostWindow = window as Window & {
+    NATIVEAPP_LOCAL_API?: string;
+    cimHost?: { chooseFile?: unknown };
+  };
+  return hostWindow.NATIVEAPP_LOCAL_API === "" && typeof hostWindow.cimHost?.chooseFile === "function";
+}
+
+export function supportsNativeFolderPicker(): boolean {
+  return isDesktopHost() || isNativeAppHost();
+}
+
 export async function getApiBase(): Promise<string> {
+  if (isNativeAppHost()) return "";
   if (configuredApiBase) return configuredApiBase;
   if (!isDesktopHost()) return "";
 
@@ -19,6 +33,14 @@ export async function getApiBase(): Promise<string> {
 }
 
 export async function pickDirectory(defaultPath?: string): Promise<string | null> {
+  if (isNativeAppHost()) {
+    const hostWindow = window as unknown as Window & {
+      cimHost: { chooseFile(options: { properties: string[] }): Promise<{ canceled?: boolean; paths?: string[]; path?: string }> };
+    };
+    const result = await hostWindow.cimHost.chooseFile({ properties: ["openDirectory"] });
+    if (result.canceled) return null;
+    return result.paths?.[0] ?? result.path ?? null;
+  }
   if (!isDesktopHost()) return null;
   const { open } = await import("@tauri-apps/plugin-dialog");
   const value = await open({ directory: true, multiple: false, defaultPath });
