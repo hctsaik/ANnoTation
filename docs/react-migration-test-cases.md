@@ -16,10 +16,11 @@ Latest focused validation (2026-11-02): 24 Vitest tests, 9 Playwright tests
 service result delivery), 24 Python tests across the web service and configurable
 result connector, and a production Vite build pass. The broader 183 Python tests
 under `tests/` also passed in the preceding validation run. A Windows GitHub
-Actions workflow now repeats the focused Python, React, build, and browser gates;
-its first hosted run is pending. Full pytest collection currently stops because
-two legacy module tests expect `C:\code\claude\scripts\shared\_manifest_db.py`
-outside this checkout.
+Actions workflow now repeats the focused Python, React, build, and browser gates.
+Its first hosted run exposed a missing test-only `httpx` install before test
+collection; the workflow now installs it, and the corrected hosted run is
+pending. Full pytest collection currently stops because two legacy module tests
+expect `C:\code\claude\scripts\shared\_manifest_db.py` outside this checkout.
 The Tauri dev host launched on this Windows ARM64 machine as an x86_64 build; its
 loopback service returned a session token on a dynamic port and exited with the
 host. Native picker UI inspection, packaged host, native ARM64, target-Service,
