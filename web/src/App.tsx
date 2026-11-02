@@ -782,6 +782,7 @@ export default function App() {
           {duplicateHandoff && <section className="card handoff-review-context" data-testid="handoff-review-context" aria-label="重複影像成對覆核資訊">
             <div className="handoff-review-heading"><div><p className="eyebrow">LV DUPLICATE REVIEW</p><h2>重複影像成對覆核</h2><p>這批有 {duplicateHandoff.pairs.length} 對候選，距離來自 {duplicateHandoff.method === "phash" ? "dHash" : "embedding"}{duplicateHandoff.cross_split_only ? "，只包含跨 split 配對" : ""}。</p></div><strong>人工判斷 · 不會自動刪除影像</strong></div>
             {duplicateHandoff.instructions && <p className="handoff-review-instructions">{duplicateHandoff.instructions}</p>}
+            <p className="handoff-review-instructions" data-testid="handoff-review-classification-guidance">請為每張圖片選擇整張圖片分類（例如 keep／drop）；分類會保存到 LV 可讀回的結果檔。這只記錄人工決定，不會刪除來源影像。</p>
             <div className="handoff-review-pairs">{duplicateHandoff.pairs.map((pair, index) => <article className="handoff-review-pair" data-testid="handoff-review-pair" key={`${pair.left_item_id}-${pair.right_item_id}-${index}`}>
               <button type="button" onClick={() => void chooseItem(pair.left_item_id)} disabled={busy} data-testid="handoff-pair-left"><strong>{pair.left_filename}</strong><small>{pair.left_split || "未指定 split"}</small></button>
               <span className="handoff-review-distance">{duplicateHandoff.method === "phash" ? `Hamming ${Math.round(pair.distance)}` : `cosine ${pair.distance.toFixed(4)}`}</span>

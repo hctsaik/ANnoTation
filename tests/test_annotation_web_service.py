@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import hashlib
 import http.client
 import io
@@ -133,8 +134,8 @@ def test_lv_duplicate_handoff_pair_context_is_path_free_and_survives_restart(tmp
             }],
         },
         "items": [
-            {"sha256": shas[0], "filename": "panel-train.png"},
-            {"sha256": shas[1], "filename": "panel-test.png"},
+            {"sha256": shas[0], "filename": "panel-train.png", "image": f"images/{pair_paths[0].name}"},
+            {"sha256": shas[1], "filename": "panel-test.png", "image": f"images/{pair_paths[1].name}"},
         ],
     }
     (images.parent / "_handoff.json").write_text(json.dumps(spec), encoding="utf-8")
@@ -161,8 +162,20 @@ def test_lv_duplicate_handoff_pair_context_is_path_free_and_survives_restart(tmp
     assert context["instructions"] == "Review the two images; never delete them automatically."
     assert str(tmp_path) not in json.dumps(first_workspace)
 
+    left_item = next(item for item in first_workspace["items"] if item["name"] == pair_paths[0].name)
+    right_item = next(item for item in first_workspace["items"] if item["name"] == pair_paths[1].name)
+    service.save_classification(created["manifest_id"], left_item["item_id"], "keep")
+    service.save_classification(created["manifest_id"], right_item["item_id"], "drop")
+    with (images.parent / "answers.csv").open(encoding="utf-8", newline="") as handle:
+        answers = {row["sha256"]: row["label"] for row in csv.DictReader(handle)}
+    assert answers == {shas[0]: "keep", shas[1]: "drop"}
+    assert str(tmp_path) not in (images.parent / "answers.csv").read_text(encoding="utf-8")
+
     reopened = AnnotationService(app_data).workspace(created["manifest_id"])
     assert reopened["handoff_context"] == context
+    assert {item["item_id"]: item["classification"] for item in reopened["items"]} == {
+        left_item["item_id"]: "keep", right_item["item_id"]: "drop",
+    }
 
 
 def test_local_dataset_scans_supported_formats_recursively_or_root_only(

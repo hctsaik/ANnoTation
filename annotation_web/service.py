@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import hashlib
 import importlib.util
 import io
@@ -48,6 +49,20 @@ def _atomic_json(path: Path, value: dict[str, Any]) -> None:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             json.dump(value, handle, ensure_ascii=False, indent=2)
             handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(name, path)
+    finally:
+        if os.path.exists(name):
+            os.unlink(name)
+
+
+def _atomic_text(path: Path, value: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, name = tempfile.mkstemp(prefix=f"{path.name}.", suffix=".tmp", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
+            handle.write(value)
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(name, path)
@@ -581,6 +596,88 @@ class AnnotationService:
             "pairs": pairs,
         }
 
+    def _sync_duplicate_handoff_answer(
+        self, manifest: dict[str, Any], item: dict[str, Any], label: str,
+    ) -> None:
+        """Publish image-level keep/drop decisions in LV's existing answers.csv contract."""
+        source = manifest.get("source_config") or {}
+        folder_value = source.get("folder_path") if isinstance(source, dict) else None
+        if manifest.get("source_type") != "folder" or not folder_value:
+            return
+        raw_images_dir = Path(str(folder_value)).expanduser()
+        if raw_images_dir.is_symlink():
+            return
+        images_dir = raw_images_dir.resolve()
+        if images_dir.name.lower() != "images":
+            return
+        handoff_dir = images_dir.parent
+        spec_path = handoff_dir / "_handoff.json"
+        try:
+            if spec_path.is_symlink() or not spec_path.is_file() or spec_path.stat().st_size > 2_000_000:
+                return
+            spec = json.loads(spec_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            return
+        payload = spec.get("payload") if isinstance(spec, dict) else None
+        if (
+            not isinstance(spec, dict)
+            or spec.get("source") != "duplicate"
+            or spec.get("task") != "verify"
+            or not isinstance(payload, dict)
+            or payload.get("kind") != "duplicate_pair_review"
+        ):
+            return
+
+        sha = Path(str(item.get("file_path") or "")).stem.lower()
+        if not re.fullmatch(r"[0-9a-f]{64}", sha):
+            return
+        spec_items = spec.get("items")
+        if not isinstance(spec_items, list):
+            return
+        matching_item = next((
+            row for row in spec_items
+            if isinstance(row, dict) and str(row.get("sha256") or "").lower() == sha
+        ), None)
+        if matching_item is None:
+            return
+        expected_image = str(matching_item.get("image") or "").replace("\\", "/")
+        expected_parts = Path(expected_image).parts
+        if (
+            len(expected_parts) != 2
+            or expected_parts[0].lower() != "images"
+            or Path(expected_parts[1]).name != expected_parts[1]
+            or (images_dir / expected_parts[1]).resolve() != Path(str(item.get("file_path") or "")).resolve()
+        ):
+            return
+
+        answers_path = handoff_dir / "answers.csv"
+        if answers_path.is_symlink():
+            raise ServiceError(409, "The duplicate-review result file cannot be a symbolic link")
+        answers: dict[str, str] = {}
+        try:
+            if answers_path.is_file():
+                if answers_path.stat().st_size > 2_000_000:
+                    raise ServiceError(409, "The duplicate-review result file is too large")
+                with answers_path.open("r", encoding="utf-8", newline="") as handle:
+                    for row in csv.DictReader(handle):
+                        row_sha = str(row.get("sha256") or "").lower()
+                        row_label = str(row.get("label") or "").strip()
+                        if re.fullmatch(r"[0-9a-f]{64}", row_sha) and row_label:
+                            answers[row_sha] = row_label
+        except (OSError, UnicodeDecodeError, csv.Error) as exc:
+            raise ServiceError(409, "The duplicate-review result file could not be read") from exc
+
+        if label:
+            answers[sha] = label
+        else:
+            answers.pop(sha, None)
+        output = io.StringIO(newline="")
+        writer = csv.writer(output)
+        writer.writerow(["sha256", "label"])
+        for answer_sha, answer_label in sorted(answers.items()):
+            writer.writerow([answer_sha, answer_label])
+        _atomic_text(answers_path, output.getvalue())
+
     def workspace(self, manifest_id: str, settings: dict[str, Any] | None = None) -> dict[str, Any]:
         manifest = self._manifest(manifest_id)
         cfg = self._process("012")._cfg
@@ -845,9 +942,9 @@ class AnnotationService:
         self._require_open_iwisc_task(self._manifest(manifest_id))
         manifest, item = self._raw_item(manifest_id, item_id)
         path = self._local_item_path(manifest, item)
+        label = label.strip()
         cfg = self._process("012")._cfg
         classifications = cfg.load_classifications(manifest_id)
-        label = label.strip()
         if label:
             classifications[item_id] = label
         else:
@@ -859,6 +956,7 @@ class AnnotationService:
         else:
             by_path.pop(str(path), None)
         cfg.save_classifications_by_path(by_path)
+        self._sync_duplicate_handoff_answer(manifest, item, label)
         self._sync_iwisc_task_bundle(manifest_id, item_id)
         return {"item_id": item_id, "classification": label}
 
