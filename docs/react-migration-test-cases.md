@@ -11,14 +11,16 @@ The React branch has a working local-folder workflow and a first Canvas editor.
 legacy scenario has passed end-to-end. Release parity remains open while a row is
 partial or pending.
 
-Latest focused validation (2026-11-02): 24 Vitest tests, 9 Playwright tests
-(including real local-folder and configured synthetic iWISC → React → Python
-service result delivery), 24 Python tests across the web service and configurable
-result connector, and a production Vite build pass. The broader 183 Python tests
-under `tests/` also passed in the preceding validation run. A Windows GitHub
-Actions workflow repeated those gates and passed for commit `25d13a1` in
+Latest local checks (2026-11-02): a focused run passed 24 Vitest tests and 24
+Python tests across the web service and configurable result connector; the full
+Playwright suite now passes all 10 tests, including local-folder, configured
+synthetic iWISC result delivery, and the LV handoff journey; the production Vite
+build passes. The broader 183 Python tests under `tests/` also passed in the
+preceding validation run. A Windows GitHub Actions workflow passed the
+then-current gates for commit `25d13a1` in
 [hosted run 41381828949](https://github.com/hctsaik/ANnoTation/actions/runs/41381828949):
 24 Python tests, 24 Vitest tests, the production build, and 9 Playwright tests.
+That hosted run predates the LV handoff case.
 Remote Service downloads use runtime `requests`; iWISC and configurable REST
 connectors use runtime `httpx`. Tests add `respx` from
 `requirements-web-test.txt`.
@@ -45,6 +47,7 @@ ARM64, target-Service, and real-model checks remain pending.
 |---|---|---|---|---|
 | APP-01 | Restore an existing dataset and keep the four workflow stages available | Last-used manifest is prioritized; four workflow stages remain available | React unit test and Playwright workflow case pass locally | Implemented; CI run pending |
 | DATA-01 | Create a dataset from a local folder, scan recursively, and accept supported image extensions | Local folder source calls module 026 and stores a manifest | `web/e2e/local-service.spec.ts` creates a dataset through the built React app and Python service, visibly opens JPG/JPEG/PNG/BMP/WEBP/TIF/TIFF and uppercase PNG at 16×12, excludes GIF/text files, compares source hashes, and verifies recursive vs root-only counts; `tests/test_annotation_web_service.py::test_local_dataset_scans_supported_formats_recursively_or_root_only` covers the same service matrix | Implemented; local browser-to-service format matrix and service matrix pass; CI and packaged-host evidence pending |
+| HANDOFF-01 | Receive an LV content-addressed handoff, show its existing annotation, save edits beside the hash-named image, and preserve the image for LV readback | The React local-folder workflow imports the handoff's `images/` directory and loads/saves its adjacent LabelMe JSON sidecars | `web/e2e/local-service.spec.ts` opens a SHA-named image and seeded rectangle in React, moves and saves it through the real Python service, restarts the service, and checks the edited sidecar plus unchanged image bytes. A separate local interoperability run used LV's actual handoff writer and readback with the Annotation service | Implemented; full local browser suite passes 10/10; packaged-host handoff journey remains unverified |
 | DATA-02 | Ingest remote and iWISC task sources | React can list and download remote Service datasets through modules 019/026; it can register an iWISC connection, list and claim tasks, load images locally, save React sidecars into the linked task record, and complete a task locally with a read-only final state | `web/e2e/iwisc-source.spec.ts` drives the built React app through the real local API and a synthetic HTTP iWISC service, including opt-in JSON result delivery, API-key handling, claim, ZIP download, annotation save, completion, and read-only state; Python tests cover unconfigured `unsupported`, configured request fields, delivery errors, registration validation, task-record persistence, and mutation lockout; target Service validation remains | Partial; configured delivery passes against the synthetic contract, but the target Service endpoint and payload semantics remain unverified |
 | SET-01 | Configure annotation labels, classification labels, and the external tool | React settings call the module 012 process layer | The real-service browser journey saves annotation/classification labels and the LabelMe tool choice, restarts the service, and verifies the tool choice reads back | Implemented; local settings persistence journey passes; CI and packaged-host evidence pending |
 | LIST-01 | Search names, filter annotation/classification/review state, clear filters, and paginate | React list supports search, status, classification, low-confidence, label filters, and 20-item pages | Model/App tests and Playwright filter case pass; App tests cover the 20/21-item boundary, disabled page controls, combined search/status/classification/confidence filters, review-status plus annotation-label filters, and returning to page one or clearing review filters | Implemented; local UI coverage complete; CI and packaged-host evidence pending |

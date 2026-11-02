@@ -522,6 +522,102 @@ test("preserves existing polygons when React saves a rectangle edit", async ({ p
   expect(saved.shapes[2].label).toBe("scratch");
 });
 
+test("imports and edits an LV SHA-addressed handoff through React", async ({ page }) => {
+  test.setTimeout(40_000);
+  await stopLocalService();
+  temporaryRoot = await mkdtemp(join(tmpdir(), "annotation-lv-handoff-e2e-"));
+  temporaryRoots.push(temporaryRoot);
+  appDataDir = join(temporaryRoot, "app data");
+  const handoffDir = join(temporaryRoot, "lv_labeling_handoff", "lv_browser_handoff");
+  sourceDir = join(handoffDir, "images");
+  await mkdir(sourceDir, { recursive: true });
+
+  const imageName = `${createHash("sha256").update(PNG_FIXTURE).digest("hex")}.png`;
+  const imagePath = join(sourceDir, imageName);
+  const sidecarPath = join(sourceDir, imageName.replace(/\.png$/i, ".json"));
+  await writeFile(imagePath, PNG_FIXTURE);
+  const originalImageHash = createHash("sha256").update(await readFile(imagePath)).digest("hex");
+  const seededAnnotation = {
+    version: "0.3.3",
+    flags: {},
+    shapes: [{
+      label: "old-class",
+      points: [[4, 5], [30, 35]],
+      group_id: null,
+      shape_type: "rectangle",
+      flags: {},
+      score: 0.9,
+    }],
+    imagePath: imageName,
+    imageData: null,
+    imageHeight: 48,
+    imageWidth: 64,
+  };
+  const seededSidecar = JSON.stringify(seededAnnotation, null, 2);
+  await writeFile(sidecarPath, seededSidecar);
+  await writeFile(join(handoffDir, "classes.txt"), "old-class\nnew-class\n");
+  await writeFile(join(handoffDir, "_handoff.json"), JSON.stringify({
+    handoff_id: "lv_browser_handoff",
+    version: 1,
+    source: "lv-react",
+    task: "re-label",
+    class_options: ["old-class", "new-class"],
+    items: [{
+      sha256: imageName.replace(/\.png$/i, ""),
+      image: `images/${imageName}`,
+      filename: "panel-a.png",
+      original_label: "old-class",
+      seed_sha: createHash("sha256").update(seededSidecar).digest("hex"),
+    }],
+  }, null, 2));
+
+  servicePort = await freeLoopbackPort();
+  serviceProcess = await startLocalService();
+  await page.goto(`http://127.0.0.1:${servicePort}`);
+  const workflow = page.getByRole("navigation", { name: "工作流程" });
+  await workflow.getByRole("button", { name: "資料集" }).click();
+  await page.getByLabel("資料夾路徑").fill(sourceDir);
+  await page.getByLabel("資料集名稱").fill("LV handoff import");
+  await page.getByRole("button", { name: /建立資料集並開始標注/ }).click();
+  await expect(page.getByRole("heading", { name: "標注工作台" })).toBeVisible();
+  const imageButton = page.getByRole("button", { name: new RegExp(imageName.replace(".png", "\\.png")) });
+  await expect(imageButton).toBeVisible();
+  await imageButton.click();
+  await expect(page.getByLabel("第 1 個框選類別")).toHaveValue("old-class");
+  await expect(page.locator(".box-coordinates")).toHaveText("26 × 30");
+
+  const canvas = page.getByLabel("圖片與標注框");
+  await expect(canvas).toBeVisible();
+  const bounds = await canvas.boundingBox();
+  if (!bounds) throw new Error("LV handoff annotation canvas has no visible bounds");
+  await page.mouse.move(bounds.x + bounds.width * 0.27, bounds.y + bounds.height * 0.42);
+  await page.mouse.down();
+  await page.mouse.move(bounds.x + bounds.width * 0.31, bounds.y + bounds.height * 0.46);
+  await page.mouse.up();
+  await page.getByRole("button", { name: /保存標注/ }).click();
+  await expect(page.getByText("已同步")).toBeVisible();
+
+  const savedBeforeRestart = JSON.parse(await readFile(sidecarPath, "utf8")) as {
+    shapes: Array<{ label: string; shape_type: string; points: number[][] }>;
+  };
+  expect(savedBeforeRestart.shapes).toHaveLength(1);
+  expect(savedBeforeRestart.shapes[0].label).toBe("old-class");
+  expect(savedBeforeRestart.shapes[0].shape_type).toBe("rectangle");
+  expect(savedBeforeRestart.shapes[0].points[0][0]).toBeGreaterThan(4);
+  expect(savedBeforeRestart.shapes[0].points[0][1]).toBeGreaterThan(5);
+  expect(createHash("sha256").update(await readFile(imagePath)).digest("hex")).toBe(originalImageHash);
+
+  await stopLocalService();
+  serviceProcess = await startLocalService();
+  await page.reload();
+  await page.getByRole("button", { name: new RegExp(imageName.replace(".png", "\\.png")) }).click();
+  await expect(page.getByLabel("第 1 個框選類別")).toHaveValue("old-class");
+  const savedAfterRestart = JSON.parse(await readFile(sidecarPath, "utf8")) as {
+    shapes: Array<{ points: number[][] }>;
+  };
+  expect(savedAfterRestart.shapes[0].points).toEqual(savedBeforeRestart.shapes[0].points);
+});
+
 test.afterAll(async () => {
   await stopLocalService();
   for (const root of temporaryRoots) await rm(root, { recursive: true, force: true });
