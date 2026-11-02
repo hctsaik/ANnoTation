@@ -11,14 +11,15 @@ The React branch has a working local-folder workflow and a first Canvas editor.
 legacy scenario has passed end-to-end. Release parity remains open while a row is
 partial or pending.
 
-Latest local checks (2026-11-02): a focused run passed 24 Vitest tests and 24
-Python tests across the web service and configurable result connector; the full
-Playwright suite now passes all 10 tests, including local-folder, configured
-synthetic iWISC result delivery, and the LV handoff journey; the production Vite
-build passes. The broader 183 Python tests under `tests/` also passed in the
-preceding validation run. Windows GitHub Actions passed the current service,
-React, build, and 10-browser-test gates for commit `0d38efc` in
-[hosted run 41395589408](https://github.com/hctsaik/ANnoTation/actions/runs/41395589408).
+Latest full local checks (2026-11-02): 25 Vitest tests, 10 Playwright tests,
+24 Python tests across the web service and configurable result connector, and
+the production Vite build pass. The broader 183 Python tests under `tests/`
+also passed in the preceding validation run. Windows GitHub Actions passed the
+then-current service, React, build, and 10-browser-test gates for commit
+`0d38efc` in [hosted run 41395589408](https://github.com/hctsaik/ANnoTation/actions/runs/41395589408).
+The later run for docs-only commit `2ab7a8a` exposed a review-note race while an
+image's detail was loading; the UI now keeps review controls disabled until the
+selected image detail is ready, with unit and browser regression coverage.
 Remote Service downloads use runtime `requests`; iWISC and configurable REST
 connectors use runtime `httpx`. Tests add `respx` from
 `requirements-web-test.txt`.

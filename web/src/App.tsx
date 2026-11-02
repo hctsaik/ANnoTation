@@ -185,6 +185,7 @@ export default function App() {
     setDetail(null);
     setImageUrl("");
     setDirty(false);
+    setReviewComment("");
     api.detail(manifestId, selectedId).then(async (value) => {
       if (!active) return;
       setDetail(value);
@@ -234,6 +235,7 @@ export default function App() {
   const linkedIwiscTask = workspace?.iwisc_task ?? null;
   const linkedTaskCompleted = linkedIwiscTask?.ant_active === 2;
   const currentItem = detail?.item ?? allItems.find((item) => item.item_id === selectedId) ?? null;
+  const selectedDetailReady = detail?.item.item_id === selectedId;
   const imageCount = workspace?.total ?? currentManifest?.item_count ?? 0;
   const approvedCount = allItems.filter((item) => item.review_status === "approved").length;
   const rejectedCount = allItems.filter((item) => item.review_status === "rejected").length;
@@ -464,7 +466,7 @@ export default function App() {
   }
 
   async function updateReview(status: "approved" | "rejected" | "pending") {
-    if (!manifestId || !selectedId) return;
+    if (!manifestId || !selectedId || !selectedDetailReady || linkedTaskCompleted) return;
     setBusy(true);
     try {
       await api.review(manifestId, selectedId, status, reviewComment);
@@ -799,9 +801,9 @@ export default function App() {
                   <section className="card inspector-card settings-mini"><div className="inspector-title"><span className="inspector-icon mint">⚙</span><div><h2>標注設定</h2><p>{workspace?.labels.length ?? 0} 個框選類別</p></div></div><label className="field-label">外部標注工具<select value={tool} onChange={(event) => setTool(event.target.value)}><option value="x-anylabeling">X-AnyLabeling</option><option value="labelme">LabelMe</option><option value="isat">ISAT-SAM</option></select></label><label className="field-label">工具執行檔（選填）<input value={toolExecutable} onChange={(event) => setToolExecutable(event.target.value)} placeholder="工具未加入 PATH 時指定" /></label>{desktopHost && <button className="secondary-button" type="button" onClick={() => void choosePath("tool")}>選擇工具執行檔…</button>}<button className="text-action" onClick={() => { setStage("data"); setPanel("labels"); }} type="button">管理標籤與分類 →</button></section>
                 </> : <section className="card inspector-card review-card"><div className="inspector-title"><span className="inspector-icon amber">✓</span><div><h2>審核決策</h2><p>檢視框選與分類後記錄結果</p></div></div>
                     <div className="review-stats"><div><small>待審查</small><strong>{pendingReviewCount}</strong></div><div><small>已核准</small><strong>{approvedCount}</strong></div><div><small>已退回</small><strong>{rejectedCount}</strong></div></div>
-                    <label className="field-label">審核備註<textarea rows={4} value={reviewComment} onChange={(event) => setReviewComment(event.target.value)} placeholder="輸入需要修正的內容或審核說明…" /></label>
-                    <div className="review-actions"><button className="reject-button" onClick={() => void updateReview("rejected")} disabled={!currentItem || busy} type="button">退回修正</button><button className="approve-button" onClick={() => void updateReview("approved")} disabled={!currentItem || busy} type="button">✓ 核准標注</button></div>
-                    {currentItem?.review_status !== "pending" && <button className="text-action" onClick={() => void updateReview("pending")} type="button">重設為待審</button>}
+                    <label className="field-label">審核備註<textarea rows={4} value={reviewComment} onChange={(event) => setReviewComment(event.target.value)} placeholder="輸入需要修正的內容或審核說明…" disabled={!selectedDetailReady || busy || linkedTaskCompleted} /></label>
+                    <div className="review-actions"><button className="reject-button" onClick={() => void updateReview("rejected")} disabled={!selectedDetailReady || busy || linkedTaskCompleted} type="button">退回修正</button><button className="approve-button" onClick={() => void updateReview("approved")} disabled={!selectedDetailReady || busy || linkedTaskCompleted} type="button">✓ 核准標注</button></div>
+                    {currentItem?.review_status !== "pending" && <button className="text-action" onClick={() => void updateReview("pending")} disabled={!selectedDetailReady || busy || linkedTaskCompleted} type="button">重設為待審</button>}
                     <div className="review-attestation"><label className="checkbox-row"><input type="checkbox" checked={reviewConfirmed} onChange={(event) => markReviewConfirmed(event.target.checked)} /><span>我已完成必要抽查與異常處理</span></label><p>此確認會保存在本機，並作為匯出前檢查的一部分。</p></div>
                   </section>}
               </aside>

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
@@ -439,6 +439,38 @@ describe("ANnoTation workflow shell", () => {
     expect(await screen.findByRole("heading", { name: "審核決策" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /核准標注/ }));
     await waitFor(() => expect(mocks.api.review).toHaveBeenCalledWith("demo", "img-a", "approved", ""));
+  });
+
+  it("waits for the selected image details before accepting a review note", async () => {
+    let resolveItemBDetail!: (value: { item: typeof itemB; annotation: { version: string; shapes: never[] } }) => void;
+    const itemBDetail = new Promise<{ item: typeof itemB; annotation: { version: string; shapes: never[] } }>((resolve) => {
+      resolveItemBDetail = resolve;
+    });
+    mocks.api.detail.mockImplementation((_manifestId: string, itemId: string) => itemId === "img-b"
+      ? itemBDetail
+      : Promise.resolve({ item: itemA, annotation: { version: "2.4.0", shapes: [] } }));
+
+    render(<App />);
+    const user = userEvent.setup();
+    await screen.findByRole("button", { name: /panel-a\.png/ });
+    const workflow = within(screen.getByRole("navigation", { name: "工作流程" }));
+    await user.click(workflow.getByRole("button", { name: /審核$/ }));
+    await user.click(await screen.findByRole("button", { name: /panel-b\.png/ }));
+    await waitFor(() => expect(mocks.api.detail).toHaveBeenCalledWith("demo", "img-b"));
+
+    const note = screen.getByLabelText("審核備註");
+    expect(note).toBeDisabled();
+    expect(screen.getByRole("button", { name: /退回修正/ })).toBeDisabled();
+    await act(async () => {
+      resolveItemBDetail({ item: itemB, annotation: { version: "2.4.0", shapes: [] } });
+    });
+
+    await waitFor(() => expect(note).toBeEnabled());
+    await user.type(note, "需補標後重送");
+    await user.click(screen.getByRole("button", { name: /退回修正/ }));
+    await waitFor(() => expect(mocks.api.review).toHaveBeenCalledWith(
+      "demo", "img-b", "rejected", "需補標後重送",
+    ));
   });
 
   it("gates partial export on both explicit opt-in and review confirmation", async () => {

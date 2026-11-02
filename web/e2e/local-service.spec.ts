@@ -245,6 +245,7 @@ test("runs a real local dataset through annotation, review, export, and restart"
   await workflow.getByRole("button", { name: "審核" }).click();
   await page.getByRole("button", { name: /panel-b\.png/ }).click();
   await page.getByLabel("審核備註").fill("需補標後重送");
+  await expect(page.getByLabel("審核備註")).toHaveValue("需補標後重送");
   await page.getByRole("button", { name: "退回修正" }).click();
   await expect(page.getByText("已退回這張圖片")).toBeVisible();
   const rejectedReview = JSON.parse(await readFile(join(sourceDir, "nested folder", "panel-b.png.review.json"), "utf8")) as { status: string; comment: string };
