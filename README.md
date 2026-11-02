@@ -75,14 +75,14 @@ architecture.
 ## Verification
 
 ```powershell
+py -m pip install -r requirements-web-test.txt
 Set-Location web
 npm test
 npm run build
 npx playwright install chromium
 npm run e2e
 Set-Location ..
-py -m pip install pytest
-py -m pytest tests/test_annotation_web_service.py -q
+py -m pytest tests/test_annotation_web_service.py tests/annotation/test_configurable_rest_delivery.py -q
 ```
 
 The browser E2E suite includes a real local-folder → React → Python service

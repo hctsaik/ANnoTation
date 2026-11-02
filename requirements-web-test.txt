@@ -1,0 +1,5 @@
+# Test-only dependencies for the React local service, connector, and browser suites.
+-r requirements-web.txt
+pytest>=8.0
+httpx>=0.27
+respx>=0.21
