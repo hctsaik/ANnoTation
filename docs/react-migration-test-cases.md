@@ -17,11 +17,12 @@ service result delivery), 24 Python tests across the web service and configurabl
 result connector, and a production Vite build pass. The broader 183 Python tests
 under `tests/` also passed in the preceding validation run. A Windows GitHub
 Actions workflow now repeats the focused Python, React, build, and browser gates.
-Its first two hosted runs exposed missing test-only `httpx` and `respx` before
-test collection; both now live in `requirements-web-test.txt`, which the
-workflow and README use as the shared test setup. The corrected hosted run is
-pending. Full pytest collection currently stops because two legacy module tests
-expect `C:\code\claude\scripts\shared\_manifest_db.py` outside this checkout.
+The initial hosted runs exposed missing service/test dependencies: remote
+Service downloads now declare runtime `requests`, while `httpx` and `respx` live
+in `requirements-web-test.txt`. The workflow and README share those requirements;
+the corrected hosted run is pending. Full pytest collection currently stops
+because two legacy module tests expect
+`C:\code\claude\scripts\shared\_manifest_db.py` outside this checkout.
 The Tauri dev host launched on this Windows ARM64 machine as an x86_64 build; its
 loopback service returned a session token on a dynamic port and exited with the
 host. Native picker UI inspection, packaged host, native ARM64, target-Service,
