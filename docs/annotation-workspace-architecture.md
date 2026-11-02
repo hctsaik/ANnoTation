@@ -54,13 +54,17 @@ process exits. Tauri's native dialogs supply paths for local image folders,
 export folders, YOLO model files, and optional external tools. Browser mode keeps
 its Vite proxy and direct path fields.
 
-The Tauri bundle remains disabled. A locked Windows x64 Python service bundle
-can be built with the React assets and has passed a frozen-process smoke journey
-for local dataset ingestion, annotation save, and new-process readback. The
-current Tauri host still launches Python from the source checkout and does not
-consume that bundle. Packaging the host, testing its restart and failure recovery,
-and validating each supported Windows architecture remain open. The bundle
-smoke is service evidence, not packaged-host evidence.
+The Windows NSIS bundle now includes the locked x64 Python service package under
+`annotation-service/`. Release-mode Tauri starts that resource executable and
+errors clearly if it is missing; only debug mode falls back to Python in the
+source checkout. The service bundle smoke covers React delivery, local dataset
+ingestion, annotation save, and new-process readback; it also verifies that the
+service exits after its parent process terminates. A current-user NSIS candidate
+was installed in a temporary directory, its host launched the bundled service
+executable, and force-terminating the host caused that service to exit. Native
+picker interaction, a complete packaged desktop data journey, graceful window
+close interaction, and native ARM64 remain open. These candidate builds are not
+release approval.
 
 ## Migration acceptance
 

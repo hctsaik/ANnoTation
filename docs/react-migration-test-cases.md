@@ -28,10 +28,18 @@ The locked CPython 3.11 AMD64 service bundle built in a fresh venv and passed it
 frozen smoke journey: React static page, health/session API, local dataset import,
 annotation save, and readback after a new service process. Optional YOLO/PyTorch,
 OpenCV, NumPy, cryptography, and psutil modules were absent from that bundle.
+The Windows NSIS installer also built (16.37 MiB) and, after current-user
+installation to a temporary directory, launched the bundled service executable
+with its packaged React asset directory. The installed service received the
+Tauri host PID and exited after that host was force-terminated; the frozen
+service smoke also verifies this parent-exit behavior. UI interaction was not
+performed.
 The Tauri dev host launched on this Windows ARM64 machine as an x86_64 build; its
 loopback service returned a session token on a dynamic port and exited with the
-host. Native picker UI inspection, packaged Tauri host, native ARM64,
-target-Service, and real-model checks remain pending.
+host. The installed NSIS host now has process-level evidence for bundled-service
+launch and cleanup after abrupt host termination. Native picker UI inspection,
+a complete packaged desktop journey, graceful window-close interaction, native
+ARM64, target-Service, and real-model checks remain pending.
 
 | ID | Existing behavior to preserve | React implementation | Evidence and remaining work | Status |
 |---|---|---|---|---|
@@ -49,7 +57,7 @@ target-Service, and real-model checks remain pending.
 | REVIEW-01 | Filter the QA queue and persist approve/reject status and comments | Review stage records per-image status and comment; review confirmation is stored in browser local storage | The real-service browser journey saves both an approval and a rejection with comments, restarts the service, filters for rejected items, and verifies the rejected status and comment in React | Implemented; local approve/reject persistence journey passes; CI and packaged-host evidence pending |
 | EXPORT-01 | Select COCO, YOLO, VOC, ImageFolder, or CSV; optionally split data; block unsafe export | React export panel checks completion, partial-export opt-in, review confirmation, and module 014 validation | The real-service browser journey selects all five formats with a 100/0/0 split and checks COCO boxes, YOLO labels, VOC XML/index, ImageFolder copy, CSV split/label values, and all five history records after service restart; an invalid Windows output path reports this attempt's error while retaining the prior successful history | Implemented; local multi-format, split, and path-failure journeys pass; CI and other split-ratio evidence pending |
 | LOCAL-01 | Keep local data inside the app boundary and reject unrelated image paths | Loopback API uses a session token, checks browser origin, and applies the dataset folder grant | Python service/API tests check token, origin, and path grant | Implemented; tests pass locally |
-| HOST-01 | Open the app as a native desktop window with local file/folder pickers and controlled sidecar lifecycle | Tauri development host starts the loopback Python service, passes its dynamic API base to React, stops it on exit, and exposes native directory/model/tool pickers; a separate locked Windows x64 service bundle now packages the Python runtime and React assets | Tauri dev lifecycle and picker binding tests pass; the frozen service smoke verifies React delivery, local ingestion, annotation persistence, and readback after a new process. The Tauri bundle is still disabled and does not yet launch the service bundle. Native picker UI inspection, packaged host lifecycle, and native ARM64 evidence remain | Partial; service bundle verified, packaged Tauri host remains open |
+| HOST-01 | Open the app as a native desktop window with local file/folder pickers and controlled sidecar lifecycle | Tauri development host starts the source Python service; release mode launches the bundled Windows x64 service resource and exposes native directory/model/tool pickers | The locked service smoke verifies React delivery, local ingestion, annotation persistence, new-process readback, and service exit when its parent terminates. A 16.37 MiB current-user NSIS candidate built; the installed Tauri process launched `annotation-service.exe` from the installer resource directory with its PID, and the service exited after the host was force-terminated. Full packaged UI/data flow, native picker interaction, graceful worker shutdown through user window close, and native ARM64 remain unverified | Partial; packaged launch and abrupt-host cleanup are verified, end-to-end desktop parity remains open |
 
 ## Required gates before claiming parity
 

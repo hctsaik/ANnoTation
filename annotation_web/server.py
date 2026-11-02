@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import argparse
+import os
 import hmac
 import json
 import mimetypes
 import secrets
 import sys
+import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -16,6 +19,43 @@ from .service import AnnotationService, ServiceError
 
 _MAX_BODY = 10 * 1024 * 1024
 _DEFAULT_DEV_ORIGINS = {"http://127.0.0.1:5173", "http://localhost:5173"}
+
+
+def _watch_parent_process(server: ThreadingHTTPServer, parent_pid: int) -> None:
+    """Stop the service if its desktop host exits without orderly cleanup."""
+    if os.name == "nt":
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+        kernel32.WaitForSingleObject.restype = wintypes.DWORD
+        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+        kernel32.CloseHandle.restype = wintypes.BOOL
+        handle = kernel32.OpenProcess(0x00100000, False, parent_pid)  # SYNCHRONIZE
+        if handle:
+            try:
+                while True:
+                    result = kernel32.WaitForSingleObject(handle, 500)
+                    if result == 0:  # WAIT_OBJECT_0
+                        server.shutdown()
+                        return
+                    if result != 0x00000102:  # WAIT_TIMEOUT
+                        break
+            finally:
+                kernel32.CloseHandle(handle)
+
+    while True:
+        try:
+            os.kill(parent_pid, 0)
+        except PermissionError:
+            pass
+        except OSError:
+            server.shutdown()
+            return
+        time.sleep(0.5)
 
 
 def make_handler(
@@ -274,6 +314,7 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=0)
     parser.add_argument("--app-data-dir", type=Path)
     parser.add_argument("--web-dir", type=Path, default=Path(__file__).resolve().parents[1] / "web" / "dist")
+    parser.add_argument("--parent-pid", type=int, default=0)
     parser.add_argument("--token", default="")
     parser.add_argument("--allowed-origin", action="append", default=[])
     args = parser.parse_args()
@@ -286,6 +327,13 @@ def main() -> None:
     handler = make_handler(service, token, static_dir, origins)
     server = ThreadingHTTPServer((args.host, args.port), handler)
     server.daemon_threads = True
+    if args.parent_pid > 0:
+        threading.Thread(
+            target=_watch_parent_process,
+            args=(server, args.parent_pid),
+            name="annotation-parent-watchdog",
+            daemon=True,
+        ).start()
     port = server.server_address[1]
     print(json.dumps({"event": "ready", "host": args.host, "port": port, "token": token}), flush=True)
     try:

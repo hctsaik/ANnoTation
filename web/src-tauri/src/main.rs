@@ -41,6 +41,20 @@ fn repository_root() -> Result<PathBuf, Box<dyn Error>> {
         .to_path_buf())
 }
 
+fn packaged_service_directory(app: &tauri::AppHandle) -> Result<Option<PathBuf>, Box<dyn Error>> {
+    let package = app.path().resource_dir()?.join("annotation-service");
+    let executable = package.join("annotation-service.exe");
+    let static_index = package
+        .join("_internal")
+        .join("web")
+        .join("dist")
+        .join("index.html");
+    if executable.is_file() && static_index.is_file() {
+        return Ok(Some(package));
+    }
+    Ok(None)
+}
+
 fn python_executable() -> Result<PathBuf, Box<dyn Error>> {
     if let Some(python) = env::var_os("ANNOTATION_PYTHON") {
         return Ok(PathBuf::from(python));
@@ -66,26 +80,56 @@ fn python_executable() -> Result<PathBuf, Box<dyn Error>> {
 }
 
 fn start_backend(app: &tauri::AppHandle) -> Result<Backend, Box<dyn Error>> {
-    let root = repository_root()?;
     let app_data_dir = app.path().app_data_dir()?;
     fs::create_dir_all(&app_data_dir)?;
     let log_path = app_data_dir.join("annotation-backend.log");
     let stderr = File::create(log_path)?;
 
-    let mut child = Command::new(python_executable()?)
-        .args([
-            "-m",
-            "annotation_web.server",
-            "--host",
-            "127.0.0.1",
-            "--port",
-            "0",
-            "--app-data-dir",
-        ])
-        .arg(&app_data_dir)
-        .args(["--web-dir"])
-        .arg(root.join("web").join("dist"))
-        .current_dir(&root)
+    let mut command = if let Some(package) = packaged_service_directory(app)? {
+        let executable = package.join("annotation-service.exe");
+        let static_dir = package.join("_internal").join("web").join("dist");
+        let mut command = Command::new(executable);
+        command
+            .args(["--host", "127.0.0.1", "--port", "0", "--app-data-dir"])
+            .arg(&app_data_dir)
+            .args(["--parent-pid"])
+            .arg(std::process::id().to_string())
+            .args(["--web-dir"])
+            .arg(static_dir)
+            .current_dir(package);
+        command
+    } else {
+        if !cfg!(debug_assertions) {
+            return Err("The packaged ANnoTation service bundle is missing".into());
+        }
+        let root = repository_root()?;
+        let mut command = Command::new(python_executable()?);
+        command
+            .args([
+                "-m",
+                "annotation_web.server",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "0",
+                "--app-data-dir",
+            ])
+            .arg(&app_data_dir)
+            .args(["--parent-pid"])
+            .arg(std::process::id().to_string())
+            .args(["--web-dir"])
+            .arg(root.join("web").join("dist"))
+            .current_dir(root);
+        command
+    };
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000); // CREATE_NO_WINDOW; stdout/stderr stay piped.
+    }
+
+    let mut child = command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::from(stderr))

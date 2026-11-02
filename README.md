@@ -62,9 +62,11 @@ npm run tauri:dev
 Set `ANNOTATION_PYTHON` to a Python 3.11 executable if the Python launcher does
 not select the intended environment or architecture. The development host stores
 its service log and app data in the operating system's per-user app-data
-directory. The Tauri bundle is still disabled. A reproducible Windows x64 Python
-service bundle can now be built, but the Tauri host has not yet been wired to use
-that bundle and this is not a packaged desktop release.
+directory. The Windows NSIS candidate bundles a separate Python service runtime;
+the release host starts that bundled executable and does not fall back to a
+machine-installed Python. The candidate has been built and its installed host
+was observed launching the bundled service. This does not establish full desktop
+UI parity, native ARM64 support, model-runtime support, or release readiness.
 
 ## Build the Windows Python service bundle
 
@@ -78,15 +80,22 @@ py -3.11-64 -m venv .venv-web-package
 npm --prefix web ci
 & .\.venv-web-package\Scripts\python.exe scripts\build_annotation_web_bundle.py
 & .\.venv-web-package\Scripts\python.exe scripts\smoke_annotation_web_bundle.py
+npm --prefix web run tauri -- build --bundles nsis
 ```
 
 The build script rejects a Python environment whose installed versions differ
 from the lock. The smoke test launches the frozen service, loads its React page,
 creates a local dataset, saves an annotation, then stops and restarts the service
-and verifies the dataset and annotation read back. Output is written to
+and verifies the dataset and annotation read back. It also starts the service
+with a parent PID, terminates that parent, and verifies the service exits. Output
+is written to
 `dist/annotation-web/`; it is a local build artifact and is not committed. This
 profile has only been built and exercised as CPython 3.11 AMD64 on Windows ARM64
-emulation; native ARM64 and a Tauri installer remain unverified.
+emulation. The NSIS candidate uses current-user install mode and was 16.37 MiB
+in the observed build. It launched its bundled service after installation in a
+temporary directory; force-terminating the installed host also caused that
+service process to exit. Screen interaction, native picker use, native ARM64,
+and the optional model runtime remain unverified.
 
 ## Local model support
 

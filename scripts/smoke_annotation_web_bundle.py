@@ -56,10 +56,22 @@ def _request(
         return exc.code, exc.read(), dict(exc.headers.items())
 
 
-def _start_service(executable: Path, package: Path, static_dir: Path, app_data: Path, timeout: float):
+def _start_service(
+    executable: Path,
+    package: Path,
+    static_dir: Path,
+    app_data: Path,
+    timeout: float,
+    parent_pid: int = 0,
+):
+    command = [
+        str(executable), "--host", "127.0.0.1", "--port", "0",
+        "--app-data-dir", str(app_data), "--web-dir", str(static_dir),
+    ]
+    if parent_pid > 0:
+        command.extend(["--parent-pid", str(parent_pid)])
     process = subprocess.Popen(
-        [str(executable), "--host", "127.0.0.1", "--port", "0",
-         "--app-data-dir", str(app_data), "--web-dir", str(static_dir)],
+        command,
         cwd=package,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
@@ -177,6 +189,33 @@ def main() -> int:
             )
             reopened = json.loads(reopened_body)
             assert status == 200 and reopened["annotation"]["shapes"][0]["label"] == "smoke", reopened
+
+            _stop_service(process)
+            process = None
+            parent = subprocess.Popen(
+                [sys.executable, "-c", "import time; time.sleep(120)"],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            watcher_process = None
+            try:
+                watcher_process, _watcher_base, _watcher_token = _start_service(
+                    executable, package, static_dir, temp / "watchdog-app-data",
+                    args.startup_timeout, parent.pid,
+                )
+                parent.terminate()
+                parent.wait(timeout=5)
+                watcher_process.wait(timeout=8)
+                assert watcher_process.returncode == 0, watcher_process.returncode
+            finally:
+                if parent.poll() is None:
+                    parent.kill()
+                    parent.wait(timeout=5)
+                if watcher_process is not None:
+                    _stop_service(watcher_process)
+
             print(json.dumps({
                 "result": "passed",
                 "reopened_port": int(base.rsplit(":", 1)[1]),
@@ -186,6 +225,7 @@ def main() -> int:
                 "annotation_saved_and_read_after_new_process": True,
                 "optional_ai_runtime_excluded": True,
                 "optional_ai_request_reports_unavailable": True,
+                "service_exits_after_parent_termination": True,
             }, indent=2))
         finally:
             if process is not None:
