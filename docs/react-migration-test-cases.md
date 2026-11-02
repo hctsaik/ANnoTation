@@ -23,8 +23,9 @@ selected image detail is ready, with unit and browser regression coverage. The
 run for `e0b8707` then exposed the same stale-detail race in image classification:
 the selection could revert after a clear. Classification controls now wait for
 the selected detail and the save handler checks that detail before writing. The
-26-test Vitest suite, production build, and 10-test Playwright suite pass locally;
-hosted confirmation for this fix is pending.
+26-test Vitest suite, production build, and 10-test Playwright suite pass locally.
+The follow-up Windows run for `fe29ce5` passed the service, React, build, and
+browser gates in [hosted run 41396950460](https://github.com/hctsaik/ANnoTation/actions/runs/41396950460).
 Remote Service downloads use runtime `requests`; iWISC and configurable REST
 connectors use runtime `httpx`. Tests add `respx` from
 `requirements-web-test.txt`.
