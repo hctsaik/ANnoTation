@@ -16,12 +16,12 @@ Latest focused validation (2026-11-02): 24 Vitest tests, 9 Playwright tests
 service result delivery), 24 Python tests across the web service and configurable
 result connector, and a production Vite build pass. The broader 183 Python tests
 under `tests/` also passed in the preceding validation run. A Windows GitHub
-Actions workflow now repeats the focused Python, React, build, and browser gates.
-The initial hosted runs exposed missing service/test dependencies: remote
-Service downloads now declare runtime `requests`, while `httpx` and `respx` live
-in `requirements-web-test.txt`. The workflow and README share those requirements;
-the corrected hosted run is pending. Full pytest collection currently stops
-because two legacy module tests expect
+Actions workflow repeated those gates and passed for commit `25d13a1` in
+[hosted run 41381828949](https://github.com/hctsaik/ANnoTation/actions/runs/41381828949):
+24 Python tests, 24 Vitest tests, the production build, and 9 Playwright tests.
+Remote Service downloads declare runtime `requests`; test-only `httpx` and
+`respx` live in `requirements-web-test.txt`, shared by the workflow and README.
+Full pytest collection currently stops because two legacy module tests expect
 `C:\code\claude\scripts\shared\_manifest_db.py` outside this checkout.
 The Tauri dev host launched on this Windows ARM64 machine as an x86_64 build; its
 loopback service returned a session token on a dynamic port and exited with the
