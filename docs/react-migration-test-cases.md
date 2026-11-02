@@ -16,11 +16,14 @@ production Vite build, and all 17 `tests/test_annotation_web_service.py` tests
 pass. The Playwright set now includes a browser-to-service YOLO model upload.
 The NativeApp bridge unit case exercises folder selection and model upload with
 an injected `cimHost` contract. Neither represents a packaged NativeApp host.
-The configurable REST connector tests and full repository pytest suite
-were not rerun for this change. An earlier validation passed 25 Python tests
-across the web service and configurable result connector; the broader 183 Python
-tests under `tests/` also passed in a preceding run. Windows GitHub Actions
-passed the then-current service, React, build, and 10-browser-test gates for commit
+The push for commit `1e595ad` passed Windows GitHub Actions service and REST
+connector tests, React tests, the production build, and real browser journeys in
+[hosted run 41430016152](https://github.com/hctsaik/ANnoTation/actions/runs/41430016152).
+The full repository pytest suite was not rerun for this change. An earlier
+validation passed 25 Python tests across the web service and configurable result
+connector; the broader 183 Python tests under `tests/` also passed in a
+preceding run. Windows GitHub Actions passed the then-current service, React,
+build, and 10-browser-test gates for commit
 `0d38efc` in [hosted run 41395589408](https://github.com/hctsaik/ANnoTation/actions/runs/41395589408).
 The later run for docs-only commit `2ab7a8a` exposed a review-note race while an
 image's detail was loading; the UI now keeps review controls disabled until the
