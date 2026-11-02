@@ -493,6 +493,90 @@ class AnnotationService:
             },
         }
 
+    def _duplicate_handoff_context(self, manifest: dict[str, Any]) -> dict[str, Any] | None:
+        """Read only the typed, path-free pair context beside an LV handoff folder."""
+        source = manifest.get("source_config") or {}
+        folder_value = source.get("folder_path") if isinstance(source, dict) else None
+        if manifest.get("source_type") != "folder" or not folder_value:
+            return None
+        folder = Path(str(folder_value)).expanduser().resolve()
+        if folder.name.lower() != "images":
+            return None
+        spec_path = folder.parent / "_handoff.json"
+        try:
+            if spec_path.is_symlink() or not spec_path.is_file() or spec_path.stat().st_size > 2_000_000:
+                return None
+            spec = json.loads(spec_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            return None
+        if not isinstance(spec, dict) or spec.get("source") != "duplicate" or spec.get("task") != "verify":
+            return None
+        payload = spec.get("payload")
+        if not isinstance(payload, dict) or payload.get("kind") != "duplicate_pair_review":
+            return None
+
+        item_ids_by_sha: dict[str, str] = {}
+        for item in manifest_db.get_manifest_items(self.db_path, str(manifest.get("manifest_id") or "")):
+            sha = Path(str(item.get("file_path") or "")).stem.lower()
+            if re.fullmatch(r"[0-9a-f]{64}", sha):
+                item_ids_by_sha[sha] = str(item.get("item_id") or "")
+
+        pairs = []
+        raw_pairs = payload.get("pairs")
+        if not isinstance(raw_pairs, list):
+            return None
+        for pair in raw_pairs[:200]:
+            if not isinstance(pair, dict):
+                continue
+            left_sha = str(pair.get("left_sha256") or "").lower()
+            right_sha = str(pair.get("right_sha256") or "").lower()
+            left_id = item_ids_by_sha.get(left_sha)
+            right_id = item_ids_by_sha.get(right_sha)
+            distance = pair.get("distance")
+            if (
+                not left_id or not right_id
+                or not re.fullmatch(r"[0-9a-f]{64}", left_sha)
+                or not re.fullmatch(r"[0-9a-f]{64}", right_sha)
+                or isinstance(distance, bool)
+                or not isinstance(distance, (int, float))
+            ):
+                continue
+            try:
+                normalized_distance = float(distance)
+            except OverflowError:
+                continue
+            if not math.isfinite(normalized_distance):
+                continue
+            pairs.append({
+                "left_item_id": left_id,
+                "right_item_id": right_id,
+                "left_filename": (
+                    str(pair.get("left_filename") or "Image")
+                    .replace("\\", "/").rsplit("/", 1)[-1][:255]
+                ),
+                "right_filename": (
+                    str(pair.get("right_filename") or "Image")
+                    .replace("\\", "/").rsplit("/", 1)[-1][:255]
+                ),
+                "left_split": str(pair.get("left_split") or "")[:128],
+                "right_split": str(pair.get("right_split") or "")[:128],
+                "distance": normalized_distance,
+            })
+        if not pairs:
+            return None
+        method = payload.get("method")
+        if method not in {"phash", "embedding"}:
+            return None
+        return {
+            "handoff_id": str(spec.get("handoff_id") or "")[:128],
+            "task": "verify",
+            "kind": "duplicate_pair_review",
+            "method": method,
+            "cross_split_only": bool(payload.get("cross_split_only")),
+            "instructions": str(spec.get("instructions") or "")[:500],
+            "pairs": pairs,
+        }
+
     def workspace(self, manifest_id: str, settings: dict[str, Any] | None = None) -> dict[str, Any]:
         manifest = self._manifest(manifest_id)
         cfg = self._process("012")._cfg
@@ -546,6 +630,7 @@ class AnnotationService:
             "classification_labels": result.get("classification_labels", []),
             "annotation_tool": result.get("annotation_tool", "x-anylabeling"),
             "iwisc_task": self._linked_iwisc_task(manifest),
+            "handoff_context": self._duplicate_handoff_context(manifest),
             "items": items,
         }
 

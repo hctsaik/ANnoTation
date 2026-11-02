@@ -79,6 +79,26 @@ export type Item = {
   shapes?: Shape[];
 };
 
+export type HandoffReviewPair = {
+  left_item_id: string;
+  right_item_id: string;
+  left_filename: string;
+  right_filename: string;
+  left_split: string;
+  right_split: string;
+  distance: number;
+};
+
+export type HandoffReviewContext = {
+  handoff_id: string;
+  task: "verify";
+  kind: "duplicate_pair_review";
+  method: "phash" | "embedding";
+  cross_split_only: boolean;
+  instructions: string;
+  pairs: HandoffReviewPair[];
+};
+
 export type Workspace = {
   manifest_id: string;
   manifest_name: string;
@@ -89,6 +109,7 @@ export type Workspace = {
   classification_labels: string[];
   annotation_tool: string;
   iwisc_task?: LinkedIwiscTask | null;
+  handoff_context?: HandoffReviewContext | null;
   items: Item[];
 };
 

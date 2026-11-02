@@ -241,6 +241,9 @@ export default function App() {
   const rejectedCount = allItems.filter((item) => item.review_status === "rejected").length;
   const pendingReviewCount = Math.max(0, allItems.length - approvedCount - rejectedCount);
   const selectedItemIndex = allItems.findIndex((item) => item.item_id === selectedId);
+  const duplicateHandoff = workspace?.handoff_context?.kind === "duplicate_pair_review"
+    ? workspace.handoff_context
+    : null;
 
   async function refreshWorkspace(id = manifestId) {
     if (!id) return;
@@ -752,6 +755,15 @@ export default function App() {
             <select aria-label="目前資料集" value={manifestId} onChange={(event) => setManifestId(event.target.value)}>{manifests.map((item) => <option key={item.manifest_id} value={item.manifest_id}>{item.name} · {item.item_count} 張</option>)}</select>
             <button className="quiet-button" onClick={() => void refreshWorkspace()} disabled={!manifestId || busy || dirty} type="button">↻ 重新掃描</button>
           </div></div>
+          {duplicateHandoff && <section className="card handoff-review-context" data-testid="handoff-review-context" aria-label="重複影像成對覆核資訊">
+            <div className="handoff-review-heading"><div><p className="eyebrow">LV DUPLICATE REVIEW</p><h2>重複影像成對覆核</h2><p>這批有 {duplicateHandoff.pairs.length} 對候選，距離來自 {duplicateHandoff.method === "phash" ? "dHash" : "embedding"}{duplicateHandoff.cross_split_only ? "，只包含跨 split 配對" : ""}。</p></div><strong>人工判斷 · 不會自動刪除影像</strong></div>
+            {duplicateHandoff.instructions && <p className="handoff-review-instructions">{duplicateHandoff.instructions}</p>}
+            <div className="handoff-review-pairs">{duplicateHandoff.pairs.map((pair, index) => <article className="handoff-review-pair" data-testid="handoff-review-pair" key={`${pair.left_item_id}-${pair.right_item_id}-${index}`}>
+              <button type="button" onClick={() => void chooseItem(pair.left_item_id)} disabled={busy} data-testid="handoff-pair-left"><strong>{pair.left_filename}</strong><small>{pair.left_split || "未指定 split"}</small></button>
+              <span className="handoff-review-distance">{duplicateHandoff.method === "phash" ? `Hamming ${Math.round(pair.distance)}` : `cosine ${pair.distance.toFixed(4)}`}</span>
+              <button type="button" onClick={() => void chooseItem(pair.right_item_id)} disabled={busy} data-testid="handoff-pair-right"><strong>{pair.right_filename}</strong><small>{pair.right_split || "未指定 split"}</small></button>
+            </article>)}</div>
+          </section>}
           {linkedIwiscTask && <section className={`linked-iwisc-task ${linkedTaskCompleted ? "completed" : ""}`} aria-label="iWISC 任務狀態">
             <div className="linked-iwisc-summary"><span className="task-status-icon">{linkedTaskCompleted ? "✓" : "↗"}</span><div><strong>iWISC 任務 {linkedIwiscTask.ant_id}</strong><small>{linkedTaskCompleted ? `已在本機完成 · 回傳狀態：${linkedIwiscTask.delivery_status || "unknown"}` : "標注內容會保存到此任務紀錄"}</small></div></div>
             {linkedTaskCompleted ? <p className="linked-iwisc-message">{linkedIwiscTask.delivery_status === "unsupported" ? "外部結果回傳尚未支援；請使用匯出功能保留結果副本。" : linkedIwiscTask.delivery_status === "error" ? "本機任務已完成，但外部結果回傳失敗。" : "此任務已完成，不能再修改標注。"}</p> : <form className="linked-iwisc-complete" onSubmit={completeLinkedIwiscTask}>

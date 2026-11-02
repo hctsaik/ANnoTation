@@ -534,9 +534,22 @@ test("imports and edits an LV SHA-addressed handoff through React", async ({ pag
   await mkdir(sourceDir, { recursive: true });
 
   const imageName = `${createHash("sha256").update(PNG_FIXTURE).digest("hex")}.png`;
+  const secondImageBytes = await page.evaluate(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 64;
+    canvas.height = 48;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Could not create the duplicate-review image fixture");
+    context.fillStyle = "#255f9b";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/png").split(",")[1];
+  }).then((value) => Buffer.from(value, "base64"));
+  const secondImageName = `${createHash("sha256").update(secondImageBytes).digest("hex")}.png`;
   const imagePath = join(sourceDir, imageName);
+  const secondImagePath = join(sourceDir, secondImageName);
   const sidecarPath = join(sourceDir, imageName.replace(/\.png$/i, ".json"));
   await writeFile(imagePath, PNG_FIXTURE);
+  await writeFile(secondImagePath, secondImageBytes);
   const originalImageHash = createHash("sha256").update(await readFile(imagePath)).digest("hex");
   const seededAnnotation = {
     version: "0.3.3",
@@ -560,15 +573,35 @@ test("imports and edits an LV SHA-addressed handoff through React", async ({ pag
   await writeFile(join(handoffDir, "_handoff.json"), JSON.stringify({
     handoff_id: "lv_browser_handoff",
     version: 1,
-    source: "lv-react",
-    task: "re-label",
+    source: "duplicate",
+    task: "verify",
+    instructions: "Review the pair; keep or drop decisions are human-only.",
     class_options: ["old-class", "new-class"],
+    payload: {
+      kind: "duplicate_pair_review",
+      method: "phash",
+      cross_split_only: true,
+      pairs: [{
+        left_sha256: imageName.replace(/\.png$/i, ""),
+        right_sha256: secondImageName.replace(/\.png$/i, ""),
+        left_filename: "panel-train.png",
+        right_filename: "panel-test.png",
+        left_split: "train",
+        right_split: "test",
+        distance: 2,
+      }],
+    },
     items: [{
       sha256: imageName.replace(/\.png$/i, ""),
       image: `images/${imageName}`,
       filename: "panel-a.png",
       original_label: "old-class",
       seed_sha: createHash("sha256").update(seededSidecar).digest("hex"),
+    }, {
+      sha256: secondImageName.replace(/\.png$/i, ""),
+      image: `images/${secondImageName}`,
+      filename: "panel-b.png",
+      original_label: "old-class",
     }],
   }, null, 2));
 
@@ -581,6 +614,16 @@ test("imports and edits an LV SHA-addressed handoff through React", async ({ pag
   await page.getByLabel("資料集名稱").fill("LV handoff import");
   await page.getByRole("button", { name: /建立資料集並開始標注/ }).click();
   await expect(page.getByRole("heading", { name: "標注工作台" })).toBeVisible();
+  const pairContext = page.getByTestId("handoff-review-context");
+  await expect(pairContext).toBeVisible();
+  const pairRow = page.getByTestId("handoff-review-pair");
+  await expect(pairRow).toContainText("panel-train.png");
+  await expect(pairRow).toContainText("panel-test.png");
+  await expect(pairRow).toContainText("Hamming 2");
+  await page.getByTestId("handoff-pair-right").click();
+  await expect(page.locator(".crumbs strong")).toHaveText(secondImageName);
+  await page.getByTestId("handoff-pair-left").click();
+  await expect(page.locator(".crumbs strong")).toHaveText(imageName);
   const imageButton = page.getByRole("button", { name: new RegExp(imageName.replace(".png", "\\.png")) });
   await expect(imageButton).toBeVisible();
   await imageButton.click();

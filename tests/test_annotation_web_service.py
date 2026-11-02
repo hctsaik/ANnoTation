@@ -100,6 +100,71 @@ def test_local_dataset_image_and_annotation_round_trip(service_and_dataset):
     assert deleted["labels"]["label_map"] == {}
 
 
+def test_lv_duplicate_handoff_pair_context_is_path_free_and_survives_restart(tmp_path: Path):
+    app_data = tmp_path / "app-data"
+    images = tmp_path / "lv_labeling_handoff" / "duplicate_batch" / "images"
+    images.mkdir(parents=True)
+    pair_paths = [images / "first.png", images / "second.png"]
+    Image.new("RGB", (20, 16), "#aa2244").save(pair_paths[0])
+    Image.new("RGB", (20, 16), "#22aa44").save(pair_paths[1])
+    shas = [hashlib.sha256(path.read_bytes()).hexdigest() for path in pair_paths]
+    renamed_paths = [images / f"{sha}.png" for sha in shas]
+    for path, renamed in zip(pair_paths, renamed_paths):
+        path.replace(renamed)
+    pair_paths = renamed_paths
+    spec = {
+        "handoff_id": "duplicate_batch",
+        "version": 1,
+        "source": "duplicate",
+        "task": "verify",
+        "instructions": "Review the two images; never delete them automatically.",
+        "payload": {
+            "kind": "duplicate_pair_review",
+            "method": "embedding",
+            "cross_split_only": True,
+            "pairs": [{
+                "left_sha256": shas[0],
+                "right_sha256": shas[1],
+                "left_filename": "C:\\private\\panel-train.png",
+                "right_filename": "panel-test.png",
+                "left_split": "train",
+                "right_split": "test",
+                "distance": 0.0125,
+            }],
+        },
+        "items": [
+            {"sha256": shas[0], "filename": "panel-train.png"},
+            {"sha256": shas[1], "filename": "panel-test.png"},
+        ],
+    }
+    (images.parent / "_handoff.json").write_text(json.dumps(spec), encoding="utf-8")
+    service = AnnotationService(app_data)
+    created = service.create_dataset({
+        "folder_path": str(images), "manifest_name": "Duplicate pair review", "recursive": True,
+    })
+
+    first_workspace = service.workspace(created["manifest_id"])
+    context = first_workspace["handoff_context"]
+    assert context["kind"] == "duplicate_pair_review"
+    assert context["task"] == "verify"
+    assert context["method"] == "embedding"
+    assert context["cross_split_only"] is True
+    assert context["pairs"] == [{
+        "left_item_id": next(item["item_id"] for item in first_workspace["items"] if item["name"] == pair_paths[0].name),
+        "right_item_id": next(item["item_id"] for item in first_workspace["items"] if item["name"] == pair_paths[1].name),
+        "left_filename": "panel-train.png",
+        "right_filename": "panel-test.png",
+        "left_split": "train",
+        "right_split": "test",
+        "distance": 0.0125,
+    }]
+    assert context["instructions"] == "Review the two images; never delete them automatically."
+    assert str(tmp_path) not in json.dumps(first_workspace)
+
+    reopened = AnnotationService(app_data).workspace(created["manifest_id"])
+    assert reopened["handoff_context"] == context
+
+
 def test_local_dataset_scans_supported_formats_recursively_or_root_only(
     tmp_path: Path,
 ):
