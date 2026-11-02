@@ -452,7 +452,7 @@ export default function App() {
   }
 
   async function saveClassification(label: string) {
-    if (!manifestId || !selectedId) return;
+    if (!manifestId || !selectedId || !selectedDetailReady || linkedTaskCompleted) return;
     setClassification(label);
     try {
       await api.saveClassification(manifestId, selectedId, label);
@@ -788,8 +788,8 @@ export default function App() {
               <aside className="inspector-column">
                 {stage === "workspace" ? <>
                   <section className="card inspector-card"><div className="inspector-title"><span className="inspector-icon blue">◉</span><div><h2>影像分類</h2><p>快速設定整張圖片類別</p></div></div>
-                    <label className="field-label">分類結果<select value={classification} onChange={(event) => void saveClassification(event.target.value)} disabled={!currentItem || linkedTaskCompleted}><option value="">尚未分類</option>{(workspace?.classification_labels ?? []).map((label) => <option key={label}>{label}</option>)}{classification && !workspace?.classification_labels.includes(classification) && <option>{classification}</option>}</select></label>
-                    <div className="quick-labels">{(workspace?.classification_labels ?? []).slice(0, 6).map((label) => <button className={classification === label ? "active" : ""} key={label} onClick={() => void saveClassification(label)} disabled={linkedTaskCompleted} type="button">{label}</button>)}</div>
+                    <label className="field-label">分類結果<select value={classification} onChange={(event) => void saveClassification(event.target.value)} disabled={!selectedDetailReady || busy || linkedTaskCompleted}><option value="">尚未分類</option>{(workspace?.classification_labels ?? []).map((label) => <option key={label}>{label}</option>)}{classification && !workspace?.classification_labels.includes(classification) && <option>{classification}</option>}</select></label>
+                    <div className="quick-labels">{(workspace?.classification_labels ?? []).slice(0, 6).map((label) => <button className={classification === label ? "active" : ""} key={label} onClick={() => void saveClassification(label)} disabled={!selectedDetailReady || busy || linkedTaskCompleted} type="button">{label}</button>)}</div>
                   </section>
                   <section className="card inspector-card"><div className="inspector-title"><span className="inspector-icon violet">✦</span><div><h2>AI 預標注</h2><p>使用本機 YOLO 模型建議框選</p></div></div>
                     <label className="field-label">模型檔案路徑<input value={modelPath} onChange={(event) => setModelPath(event.target.value)} placeholder="選擇本機 .pt 模型" /></label>

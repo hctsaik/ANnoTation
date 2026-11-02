@@ -473,6 +473,34 @@ describe("ANnoTation workflow shell", () => {
     ));
   });
 
+  it("waits for the selected image details before saving its classification", async () => {
+    let resolveItemBDetail!: (value: { item: typeof itemB; annotation: { version: string; shapes: never[] } }) => void;
+    const itemBDetail = new Promise<{ item: typeof itemB; annotation: { version: string; shapes: never[] } }>((resolve) => {
+      resolveItemBDetail = resolve;
+    });
+    mocks.api.detail.mockImplementation((_manifestId: string, itemId: string) => itemId === "img-b"
+      ? itemBDetail
+      : Promise.resolve({ item: itemA, annotation: { version: "2.4.0", shapes: [] } }));
+
+    render(<App />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: /panel-b\.png/ }));
+    await waitFor(() => expect(mocks.api.detail).toHaveBeenCalledWith("demo", "img-b"));
+
+    const classification = screen.getByRole("combobox", { name: "分類結果" });
+    expect(classification).toBeDisabled();
+    expect(screen.getByRole("button", { name: "NG" })).toBeDisabled();
+
+    await act(async () => {
+      resolveItemBDetail({ item: itemB, annotation: { version: "2.4.0", shapes: [] } });
+    });
+
+    await waitFor(() => expect(classification).toBeEnabled());
+    await user.selectOptions(classification, "NG");
+    await waitFor(() => expect(mocks.api.saveClassification).toHaveBeenCalledWith("demo", "img-b", "NG"));
+    expect(classification).toHaveValue("NG");
+  });
+
   it("gates partial export on both explicit opt-in and review confirmation", async () => {
     render(<App />);
     await screen.findByRole("heading", { name: "標注工作台" });
