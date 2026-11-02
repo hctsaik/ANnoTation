@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from .service import AnnotationService, ServiceError
+from .service import AnnotationService, MAX_LOCAL_MODEL_BYTES, ServiceError
 
 
 _MAX_BODY = 10 * 1024 * 1024
@@ -233,8 +233,30 @@ def make_handler(
         def do_POST(self) -> None:
             if not self._authorize():
                 return
-            parts, _query = self._segments()
+            parts, query = self._segments()
             try:
+                if parts == ["api", "models", "local"]:
+                    self.close_connection = True
+                    if self.headers.get_content_type() != "application/octet-stream":
+                        raise ServiceError(415, "Model uploads must use application/octet-stream")
+                    raw_length = self.headers.get("Content-Length")
+                    if raw_length is None:
+                        raise ServiceError(411, "Model upload length is required")
+                    try:
+                        content_length = int(raw_length)
+                    except ValueError as exc:
+                        raise ServiceError(400, "Invalid model upload length") from exc
+                    if content_length < 0:
+                        raise ServiceError(400, "Invalid model upload length")
+                    if content_length > MAX_LOCAL_MODEL_BYTES:
+                        raise ServiceError(413, "The selected model file exceeds the 256 MiB limit")
+                    self._json(
+                        201,
+                        service.store_yolo_model(
+                            query.get("filename", [""])[0], self.rfile.read, content_length
+                        ),
+                    )
+                    return
                 body = self._read_json()
                 if parts == ["api", "manifests"]:
                     self._json(201, service.create_dataset(body))

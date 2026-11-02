@@ -359,6 +359,58 @@ def test_yolo_prelabel_skips_existing_sidecar_without_loading_model(service_and_
     assert sidecar.read_text(encoding="utf-8") == original
 
 
+def test_uploaded_yolo_model_is_app_scoped_and_loads_by_content_reference(service_and_dataset, monkeypatch):
+    service, _source, created = service_and_dataset
+    model_bytes = b"fixture yolo model bytes"
+    stored = service.store_yolo_model(
+        "C:\\private\\weights\\custom.pt", io.BytesIO(model_bytes).read, len(model_bytes)
+    )
+    model_hash = hashlib.sha256(model_bytes).hexdigest()
+    model_path = service.data_dir / "models" / "yolo" / f"{model_hash}.pt"
+    loaded_paths: list[str] = []
+
+    class FakeYolo:
+        names = {0: "scratch"}
+
+        def __init__(self, path: str):
+            loaded_paths.append(path)
+
+        def __call__(self, _image: str, *, conf: float, verbose: bool):
+            assert conf == pytest.approx(0.25)
+            assert verbose is False
+            return [SimpleNamespace(orig_shape=(24, 32), boxes=[])]
+
+    monkeypatch.setitem(sys.modules, "ultralytics", SimpleNamespace(YOLO=FakeYolo))
+    item_id = manifest_db.get_manifest_items(service.db_path, created["manifest_id"])[0]["item_id"]
+    result = service.run_yolo(
+        created["manifest_id"],
+        {"model_path": stored["model_ref"], "item_ids": [item_id]},
+    )
+
+    assert stored == {
+        "model_ref": f"local-model:{model_hash}.pt",
+        "name": "custom.pt",
+        "size_bytes": len(model_bytes),
+    }
+    assert model_path.read_bytes() == model_bytes
+    assert str(service.data_dir) not in json.dumps(stored)
+    assert loaded_paths == [str(model_path.resolve())]
+    assert result == {"ok": 1, "skipped": 0, "errors": 0, "detected": 0}
+
+
+def test_uploaded_yolo_model_rejects_unsupported_suffix_and_oversize(service_and_dataset):
+    service, _source, _created = service_and_dataset
+    with pytest.raises(ServiceError) as unsupported:
+        service.store_yolo_model("weights.txt", io.BytesIO(b"x").read, 1)
+    assert unsupported.value.status == 415
+
+    with pytest.raises(ServiceError) as too_large:
+        service.store_yolo_model(
+            "weights.pt", lambda _size: pytest.fail("oversized body must not be read"), 256 * 1024 * 1024 + 1
+        )
+    assert too_large.value.status == 413
+
+
 def test_yolo_prelabel_overwrite_uses_confidence_and_writes_boxes(service_and_dataset, tmp_path, monkeypatch):
     service, source, created = service_and_dataset
     image_path = source / "panel-a.png"

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import io
 import json
@@ -12,7 +13,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -28,6 +29,9 @@ EXPORT_FORMATS = {"coco_json", "yolo_txt", "pascal_voc", "imagefolder", "csv"}
 TOOLS = {"x-anylabeling", "labelme", "isat"}
 _ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 _EXTERNAL_TASK_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+_LOCAL_YOLO_MODEL_REF = re.compile(r"^local-model:([0-9a-f]{64})(\.(?:pt|onnx|engine))$")
+_YOLO_MODEL_SUFFIXES = {".pt", ".onnx", ".engine"}
+MAX_LOCAL_MODEL_BYTES = 256 * 1024 * 1024
 
 
 class ServiceError(Exception):
@@ -961,11 +965,104 @@ class AnnotationService:
             raise ServiceError(503, "The selected annotation tool could not be started")
         return {"launched": True, "tool": tool_id, "item_id": item_id}
 
+    def store_yolo_model(
+        self, filename: str, reader: Callable[[int], bytes], content_length: int
+    ) -> dict[str, Any]:
+        """Copy a user-selected YOLO model into app data without exposing its path."""
+        if not isinstance(filename, str):
+            raise ServiceError(400, "Select a local YOLO model file")
+        display_name = filename.replace("\\", "/").rsplit("/", 1)[-1].strip()
+        display_name = "".join(char for char in display_name if char.isprintable())[:255]
+        suffix = Path(display_name).suffix.lower()
+        if not display_name or suffix not in _YOLO_MODEL_SUFFIXES:
+            raise ServiceError(415, "Choose a .pt, .onnx, or .engine model file")
+        if content_length <= 0:
+            raise ServiceError(400, "The selected model file is empty")
+        if content_length > MAX_LOCAL_MODEL_BYTES:
+            raise ServiceError(413, "The selected model file exceeds the 256 MiB limit")
+
+        app_data = self.data_dir.resolve()
+        model_dir = app_data / "models" / "yolo"
+        if any(path.is_symlink() for path in (app_data / "models", model_dir)):
+            raise ServiceError(409, "The local model storage directory is not safe to use")
+        try:
+            model_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise ServiceError(507, "The selected model could not be stored in app data") from exc
+        try:
+            model_dir.resolve().relative_to(app_data)
+        except ValueError as exc:
+            raise ServiceError(409, "The local model storage directory is not safe to use") from exc
+
+        fd, temporary_name = tempfile.mkstemp(prefix=".model-upload-", suffix=".tmp", dir=model_dir)
+        temporary_path = Path(temporary_name)
+        digest = hashlib.sha256()
+        remaining = content_length
+        try:
+            with os.fdopen(fd, "wb") as target:
+                while remaining:
+                    chunk = reader(min(1024 * 1024, remaining))
+                    if not chunk:
+                        raise ServiceError(400, "The model upload ended before its declared size")
+                    target.write(chunk)
+                    digest.update(chunk)
+                    remaining -= len(chunk)
+                target.flush()
+                os.fsync(target.fileno())
+
+            model_hash = digest.hexdigest()
+            destination = model_dir / f"{model_hash}{suffix}"
+            if destination.is_symlink():
+                raise ServiceError(409, "The existing local model entry is not safe to use")
+            if destination.exists():
+                if not destination.is_file() or destination.stat().st_size != content_length:
+                    raise ServiceError(409, "The existing local model entry failed its integrity check")
+                existing_digest = hashlib.sha256()
+                with destination.open("rb") as existing_model:
+                    for chunk in iter(lambda: existing_model.read(1024 * 1024), b""):
+                        existing_digest.update(chunk)
+                if existing_digest.hexdigest() != model_hash:
+                    raise ServiceError(409, "The existing local model entry failed its integrity check")
+                temporary_path.unlink()
+            else:
+                os.replace(temporary_path, destination)
+            return {
+                "model_ref": f"local-model:{model_hash}{suffix}",
+                "name": display_name,
+                "size_bytes": content_length,
+            }
+        except ServiceError:
+            raise
+        except OSError as exc:
+            raise ServiceError(507, "The selected model could not be stored in app data") from exc
+        finally:
+            temporary_path.unlink(missing_ok=True)
+
+    def _resolve_yolo_model_path(self, model_value: str) -> Path:
+        reference = _LOCAL_YOLO_MODEL_REF.fullmatch(model_value)
+        if reference:
+            app_data = self.data_dir.resolve()
+            stored_dir = app_data / "models" / "yolo"
+            if any(path.is_symlink() for path in (app_data / "models", stored_dir)):
+                raise ServiceError(400, "Select a local YOLO model file")
+            model_dir = stored_dir.resolve()
+            try:
+                model_dir.relative_to(app_data)
+            except ValueError as exc:
+                raise ServiceError(400, "Select a local YOLO model file") from exc
+            stored_path = model_dir / f"{reference.group(1)}{reference.group(2)}"
+            path = stored_path.resolve()
+            if stored_path.is_symlink() or path.parent != model_dir or not path.is_file():
+                raise ServiceError(400, "Select a local YOLO model file")
+            return path
+        path = Path(model_value).expanduser().resolve()
+        if not path.is_file():
+            raise ServiceError(400, "Select a local YOLO model file")
+        return path
+
     def run_yolo(self, manifest_id: str, params: dict[str, Any]) -> dict[str, Any]:
         self._require_open_iwisc_task(self._manifest(manifest_id))
-        model_path = Path(str(params.get("model_path") or "")).expanduser().resolve()
-        if not model_path.is_file():
-            raise ServiceError(400, "Select a local YOLO model file")
+        model_path = self._resolve_yolo_model_path(str(params.get("model_path") or ""))
         try:
             confidence = float(params.get("confidence", 0.25))
         except (TypeError, ValueError) as exc:

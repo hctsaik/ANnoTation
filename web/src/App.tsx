@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { AnnotationCanvas } from "./AnnotationCanvas";
 import { api, loadImageUrl } from "./api";
 import { isDesktopHost, isNativeAppHost, pickDirectory, pickExecutable, pickModelFile } from "./host";
@@ -92,6 +92,8 @@ export default function App() {
   const [mergeFrom, setMergeFrom] = useState<string[]>([]);
   const [mergeTo, setMergeTo] = useState("");
   const [modelPath, setModelPath] = useState("");
+  const [modelDisplayName, setModelDisplayName] = useState("");
+  const modelFileInput = useRef<HTMLInputElement>(null);
   const [confidence, setConfidence] = useState(0.25);
   const [overwritePredictions, setOverwritePredictions] = useState(false);
   const [exportFormats, setExportFormats] = useState<string[]>(["coco_json"]);
@@ -113,10 +115,31 @@ export default function App() {
       if (selected === null) return;
       if (kind === "dataset") setFolderPath(selected);
       else if (kind === "export") setExportDir(selected);
-      else if (kind === "model") setModelPath(selected);
+      else if (kind === "model") {
+        setModelPath(selected);
+        setModelDisplayName("");
+      }
       else setToolExecutable(selected);
     } catch (reason) {
       setError(shortError(reason));
+    }
+  }
+
+  async function importLocalModel(file: File | undefined) {
+    if (!file) return;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const stored = await api.uploadLocalModel(file);
+      setModelPath(stored.model_ref);
+      setModelDisplayName(stored.name);
+      setNotice(`本機模型 ${stored.name} 已保存至 ANnoTation App data（${(stored.size_bytes / 1024 / 1024).toFixed(1)} MiB）`);
+    } catch (reason) {
+      setError(shortError(reason));
+    } finally {
+      setBusy(false);
+      if (modelFileInput.current) modelFileInput.current.value = "";
     }
   }
 
@@ -805,8 +828,11 @@ export default function App() {
                     <div className="quick-labels">{(workspace?.classification_labels ?? []).slice(0, 6).map((label) => <button className={classification === label ? "active" : ""} key={label} onClick={() => void saveClassification(label)} disabled={!selectedDetailReady || busy || linkedTaskCompleted} type="button">{label}</button>)}</div>
                   </section>
                   <section className="card inspector-card"><div className="inspector-title"><span className="inspector-icon violet">✦</span><div><h2>AI 預標注</h2><p>使用本機 YOLO 模型建議框選</p></div></div>
-                    <label className="field-label">模型檔案路徑<input value={modelPath} onChange={(event) => setModelPath(event.target.value)} placeholder="選擇本機 .pt 模型" /></label>
+                    <label className="field-label">本機 YOLO 模型<input aria-label="模型檔案路徑" value={modelDisplayName || modelPath} onChange={(event) => { setModelPath(event.target.value); setModelDisplayName(""); }} placeholder="選擇或輸入本機 .pt 模型" /></label>
                     {desktopHost && <button className="secondary-button" type="button" onClick={() => void choosePath("model")}>選擇模型檔案…</button>}
+                    <button className="secondary-button" type="button" onClick={() => modelFileInput.current?.click()} disabled={busy}>匯入本機模型檔…</button>
+                    <input ref={modelFileInput} aria-label="匯入本機 YOLO 模型" type="file" accept=".pt,.onnx,.engine" onChange={(event) => void importLocalModel(event.currentTarget.files?.[0])} style={{ display: "none" }} />
+                    <span className="field-help">匯入檔會保存於本機 App data，最大 256 MiB；選取後由本機 Python worker 載入。</span>
                     <label className="field-label range-label">信心度 <strong>{confidence.toFixed(2)}</strong><input type="range" min="0" max="1" step="0.01" value={confidence} onChange={(event) => setConfidence(Number(event.target.value))} /></label>
                     <label className="checkbox-row small-check"><input type="checkbox" checked={overwritePredictions} onChange={(event) => setOverwritePredictions(event.target.checked)} /><span>覆寫現有標注</span></label>
                     <div className="prelabel-actions"><button className="secondary-button" onClick={() => void runPrelabel(selectedId ? [selectedId] : [])} disabled={!modelPath.trim() || !currentItem || busy} type="button">✦ 對此圖執行</button><button className="secondary-button" onClick={() => void runPrelabel()} disabled={!modelPath.trim() || busy} type="button">對資料集執行</button></div><span className="field-help">每批最多 500 張圖片。可調整信心度及覆寫現有標注。</span>

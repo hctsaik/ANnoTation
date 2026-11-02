@@ -51,9 +51,12 @@ The app is usable in a browser during development. The Tauri development host
 loads the same React source, starts the local Python API on a dynamic loopback
 port, passes that API base to React, and stops the service when the desktop
 process exits. Tauri's native dialogs supply paths for local image folders,
-export folders, YOLO model files, and optional external tools. A NativeApp public
-web host uses same-origin `/api` and `cimHost.chooseFile` for dataset/export
-folders; its model-file and external-tool pickers are not implemented. The
+export folders, YOLO model files, and optional external tools. Browser and
+NativeApp hosts can import a local YOLO model through the same authenticated
+`/api` endpoint; the service writes it in chunks under app-owned data and gives
+React a SHA-256 reference without a filesystem path. NativeApp uses its existing
+same-origin `/api` proxy and `cimHost.chooseFile` folder picker for dataset and
+export folders. External-tool executable selection remains Tauri-only. The
 synthetic NativeApp bridge browser case exercises the React host contract and
 real local API service, not a packaged NativeApp host. Browser mode keeps its
 Vite proxy and direct path fields.

@@ -116,6 +116,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  uploadLocalModel: (file: File) =>
+    request<{ model_ref: string; name: string; size_bytes: number }>(
+      `/api/models/local?${new URLSearchParams({ filename: file.name })}`,
+      { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: file },
+    ),
   launchTool: (manifestId: string, itemId: string, tool: string, executableOverride = "") =>
     request(`/api/manifests/${encodeURIComponent(manifestId)}/items/${encodeURIComponent(itemId)}/launch`, {
       method: "POST",

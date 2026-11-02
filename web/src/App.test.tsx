@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
     review: vi.fn(),
     saveClassification: vi.fn(),
     prelabel: vi.fn(),
+    uploadLocalModel: vi.fn(),
     launchTool: vi.fn(),
     export: vi.fn(),
     labels: vi.fn(),
@@ -65,6 +66,7 @@ describe("ANnoTation workflow shell", () => {
     mocks.api.review.mockResolvedValue({ status: "approved" });
     mocks.api.saveClassification.mockResolvedValue({ classification: "OK" });
     mocks.api.prelabel.mockResolvedValue({ ok: 1, skipped: 0, errors: 0, detected: 2 });
+    mocks.api.uploadLocalModel.mockResolvedValue({ model_ref: `local-model:${"a".repeat(64)}.pt`, name: "yolo-local.pt", size_bytes: 4 });
     mocks.api.launchTool.mockResolvedValue({ launched: true, tool: "labelme", item_id: "img-a" });
     mocks.api.export.mockResolvedValue({ mode: "done", total_items: 2, annotated_items: 1 });
     mocks.api.labels.mockResolvedValue({
@@ -120,7 +122,7 @@ describe("ANnoTation workflow shell", () => {
 
     fireEvent.click(stages.getByRole("button", { name: /標注工作台/ }));
     fireEvent.click(screen.getByRole("button", { name: "選擇模型檔案…" }));
-    await waitFor(() => expect(screen.getByPlaceholderText("選擇本機 .pt 模型")).toHaveValue("D:\\models\\yolo.pt"));
+    await waitFor(() => expect(screen.getByPlaceholderText("選擇或輸入本機 .pt 模型")).toHaveValue("D:\\models\\yolo.pt"));
     fireEvent.click(screen.getByRole("button", { name: "選擇工具執行檔…" }));
     await waitFor(() => expect(screen.getByPlaceholderText("工具未加入 PATH 時指定")).toHaveValue("C:\\Tools\\labelme.exe"));
 
@@ -129,7 +131,7 @@ describe("ANnoTation workflow shell", () => {
     await waitFor(() => expect(screen.getByRole("textbox", { name: "資料夾路徑" })).toHaveValue("D:\\exports\\inspection"));
   });
 
-  it("uses the NativeApp bridge for dataset and export folders only", async () => {
+  it("uses the NativeApp bridge for folders and imports a local model through the same-origin API", async () => {
     mocks.nativeAppHost = true;
     mocks.pickDirectory.mockResolvedValueOnce("D:\\datasets\\inspection").mockResolvedValueOnce("D:\\exports\\inspection");
     render(<App />);
@@ -145,6 +147,14 @@ describe("ANnoTation workflow shell", () => {
     await waitFor(() => expect(screen.getByRole("textbox", { name: "資料夾路徑" })).toHaveValue("D:\\exports\\inspection"));
 
     fireEvent.click(stages.getByRole("button", { name: /標注工作台/ }));
+    fireEvent.change(screen.getByLabelText("匯入本機 YOLO 模型"), {
+      target: { files: [new File(["model"], "yolo-local.pt", { type: "application/octet-stream" })] },
+    });
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "模型檔案路徑" })).toHaveValue("yolo-local.pt"));
+    fireEvent.click(screen.getByRole("button", { name: "對資料集執行" }));
+    await waitFor(() => expect(mocks.api.prelabel).toHaveBeenCalled());
+    expect(mocks.api.uploadLocalModel).toHaveBeenCalledWith(expect.objectContaining({ name: "yolo-local.pt" }));
+    expect(mocks.api.prelabel.mock.calls[0][1]).toMatchObject({ model_path: `local-model:${"a".repeat(64)}.pt` });
     expect(screen.queryByRole("button", { name: "選擇模型檔案…" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "選擇工具執行檔…" })).not.toBeInTheDocument();
   });
@@ -164,7 +174,7 @@ describe("ANnoTation workflow shell", () => {
       .mockResolvedValueOnce({ ok: 1, skipped: 0, errors: 0, detected: 3 });
     render(<App />);
     await screen.findByRole("heading", { name: "標注工作台" });
-    fireEvent.change(screen.getByPlaceholderText("選擇本機 .pt 模型"), {
+    fireEvent.change(screen.getByPlaceholderText("選擇或輸入本機 .pt 模型"), {
       target: { value: "D:\\models\\yolo.pt" },
     });
 
@@ -194,7 +204,7 @@ describe("ANnoTation workflow shell", () => {
       .mockRejectedValueOnce(new Error("模型服務中斷"));
     render(<App />);
     await screen.findByRole("heading", { name: "標注工作台" });
-    fireEvent.change(screen.getByPlaceholderText("選擇本機 .pt 模型"), {
+    fireEvent.change(screen.getByPlaceholderText("選擇或輸入本機 .pt 模型"), {
       target: { value: "D:\\models\\yolo.pt" },
     });
 

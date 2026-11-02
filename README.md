@@ -52,9 +52,11 @@ Vite proxies API requests to the local Python service. Browser mode accepts path
 as text. The Tauri development host exposes native folder and file pickers and
 starts the loopback Python service. In a NativeApp public web host, React uses
 same-origin `/api` requests and `cimHost.chooseFile` for local dataset and export
-folders; model and executable file pickers remain Tauri-only. A browser journey
-with the injected NativeApp folder-picker contract and real Python service now
-covers local dataset creation, but does not verify a packaged NativeApp host:
+folders. A browser file input uploads YOLO models through that same-origin API;
+native model and external-tool executable pickers remain Tauri-only. Browser
+journeys cover local dataset creation through the injected NativeApp folder
+contract and model upload through the local service, but do not verify a
+packaged NativeApp host:
 
 ```powershell
 py -3.11-64 -m pip install -r requirements-web.txt
@@ -103,9 +105,13 @@ and the optional model runtime remain unverified.
 
 ## Local model support
 
-The API can run YOLO pre-labeling with a local model file. Install
-`requirements-web-ai.txt` in a Python environment that has compatible PyTorch
-wheels. Model runtime compatibility has not yet been validated on every target
+The React workbench can import a `.pt`, `.onnx`, or `.engine` YOLO model up to
+256 MiB through the authenticated loopback API. The Python service stores it in
+the app-owned data directory and returns a content-addressed reference without
+exposing its filesystem path to React. Tauri can still use its native model
+picker and an existing local path. Install `requirements-web-ai.txt` in a Python
+environment that has compatible PyTorch wheels before running YOLO inference.
+Real model/runtime compatibility has not yet been validated on every target
 architecture.
 
 ## Verification

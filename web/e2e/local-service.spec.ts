@@ -304,6 +304,39 @@ test("runs a real local dataset through annotation, review, export, and restart"
   await expect(page.getByRole("button", { name: /panel-a\.png/ })).not.toContainText("OK");
 });
 
+test("imports a local YOLO model through React into app data without exposing its source path", async ({ page }) => {
+  test.setTimeout(60_000);
+  await stopLocalService();
+  temporaryRoot = await mkdtemp(join(tmpdir(), "annotation-local-model-e2e-"));
+  temporaryRoots.push(temporaryRoot);
+  appDataDir = join(temporaryRoot, "app data");
+  sourceDir = join(temporaryRoot, "model dataset");
+  await mkdir(sourceDir, { recursive: true });
+  await writeFile(join(sourceDir, "panel-a.png"), PNG_FIXTURE);
+  servicePort = await freeLoopbackPort();
+  serviceProcess = await startLocalService();
+
+  await page.goto(`http://127.0.0.1:${servicePort}`);
+  await page.getByRole("navigation", { name: "工作流程" }).getByRole("button", { name: "資料集" }).click();
+  await page.getByLabel("資料夾路徑").fill(sourceDir);
+  await page.getByLabel("資料集名稱").fill("Local model import");
+  await page.getByRole("button", { name: /建立資料集並開始標注/ }).click();
+  await expect(page.getByRole("heading", { name: "標注工作台" })).toBeVisible();
+
+  const modelBytes = Buffer.from("small local YOLO model fixture");
+  const modelHash = createHash("sha256").update(modelBytes).digest("hex");
+  await page.getByLabel("匯入本機 YOLO 模型").setInputFiles({
+    name: "inspection-yolo.pt",
+    mimeType: "application/octet-stream",
+    buffer: modelBytes,
+  });
+  const modelField = page.getByRole("textbox", { name: "模型檔案路徑" });
+  await expect(modelField).toHaveValue("inspection-yolo.pt");
+  expect(await modelField.inputValue()).not.toContain(temporaryRoot);
+  await expect(page.getByText(/本機模型 inspection-yolo\.pt 已保存至 ANnoTation App data/)).toBeVisible();
+  expect(await readFile(join(appDataDir, "models", "yolo", `${modelHash}.pt`))).toEqual(modelBytes);
+});
+
 test("renders every supported local image format and honors recursive scanning", async ({ page }) => {
   test.setTimeout(60_000);
   temporaryRoot = await mkdtemp(join(tmpdir(), "annotation-format-matrix-e2e-"));
