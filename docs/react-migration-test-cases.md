@@ -11,11 +11,15 @@ The React branch has a working local-folder workflow and a first Canvas editor.
 legacy scenario has passed end-to-end. Release parity remains open while a row is
 partial or pending.
 
-Latest local checks (2026-11-02): 28 Vitest tests, 12 Playwright tests, the
-production Vite build, and all 17 `tests/test_annotation_web_service.py` tests
-pass. The Playwright set now includes a browser-to-service YOLO model upload.
-The NativeApp bridge unit case exercises folder selection and model upload with
-an injected `cimHost` contract. Neither represents a packaged NativeApp host.
+Latest local checks (2026-11-03): 28 Vitest tests, 12 Playwright tests, the
+production Vite build, and 27 Python tests across
+`tests/test_annotation_web_service.py` and
+`tests/annotation/test_configurable_rest_delivery.py` pass on Windows ARM64
+using CPython 3.11 AMD64. Playwright exercised the real loopback API for the
+local workflow, iWISC fixture, model upload, supported image formats, label
+merge, polygon preservation, LV handoff, and the synthetic NativeApp folder
+bridge. The injected `cimHost` contract and x64-emulated service do not verify a
+packaged NativeApp host, native ARM64 runtime, or native OS picker.
 The push for commit `1e595ad` passed Windows GitHub Actions service and REST
 connector tests, React tests, the production build, and real browser journeys in
 [hosted run 41430016152](https://github.com/hctsaik/ANnoTation/actions/runs/41430016152).
