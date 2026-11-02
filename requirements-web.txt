@@ -3,3 +3,5 @@
 Pillow>=10.0
 # Download the archive for remote Service dataset sources (module 019).
 requests>=2.31
+# The configurable REST/iWISC connector uses HTTPX at runtime.
+httpx>=0.27

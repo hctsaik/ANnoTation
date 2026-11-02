@@ -904,9 +904,11 @@ class AnnotationService:
                 continue
             if model is None:
                 try:
-                    from ultralytics import YOLO
-
-                    model = YOLO(str(model_path))
+                    # Keep the optional model runtime out of the base service
+                    # bundle. It is imported only after an explicit prelabel
+                    # request, and remains independently installable.
+                    yolo_module = importlib.import_module("ultralytics")
+                    model = yolo_module.YOLO(str(model_path))
                 except Exception as exc:
                     raise ServiceError(503, "Could not load the selected local YOLO model") from exc
             try:

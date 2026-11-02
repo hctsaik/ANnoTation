@@ -54,11 +54,13 @@ process exits. Tauri's native dialogs supply paths for local image folders,
 export folders, YOLO model files, and optional external tools. Browser mode keeps
 its Vite proxy and direct path fields.
 
-The Tauri bundle remains disabled. The Python service is started from the source
-checkout with a Python 3.11 environment; a release still needs a reproducible
-Python runtime and dependency package, restart and failure-recovery behavior,
-and validation on each supported Windows architecture. The host bridge is a
-development integration slice, not packaged-app evidence.
+The Tauri bundle remains disabled. A locked Windows x64 Python service bundle
+can be built with the React assets and has passed a frozen-process smoke journey
+for local dataset ingestion, annotation save, and new-process readback. The
+current Tauri host still launches Python from the source checkout and does not
+consume that bundle. Packaging the host, testing its restart and failure recovery,
+and validating each supported Windows architecture remain open. The bundle
+smoke is service evidence, not packaged-host evidence.
 
 ## Migration acceptance
 

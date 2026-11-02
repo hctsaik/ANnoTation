@@ -62,8 +62,31 @@ npm run tauri:dev
 Set `ANNOTATION_PYTHON` to a Python 3.11 executable if the Python launcher does
 not select the intended environment or architecture. The development host stores
 its service log and app data in the operating system's per-user app-data
-directory. It is not a packaged release: the Tauri bundle is disabled until the
-Python runtime and service dependencies have a reproducible distribution package.
+directory. The Tauri bundle is still disabled. A reproducible Windows x64 Python
+service bundle can now be built, but the Tauri host has not yet been wired to use
+that bundle and this is not a packaged desktop release.
+
+## Build the Windows Python service bundle
+
+The bundle profile contains CPython 3.11 x64, the locked service dependencies,
+and the built React assets. YOLO/PyTorch/OpenCV are optional and are excluded from
+this base profile. From a clean checkout on Windows:
+
+```powershell
+py -3.11-64 -m venv .venv-web-package
+& .\.venv-web-package\Scripts\python.exe -m pip install -r requirements-web-package.txt
+npm --prefix web ci
+& .\.venv-web-package\Scripts\python.exe scripts\build_annotation_web_bundle.py
+& .\.venv-web-package\Scripts\python.exe scripts\smoke_annotation_web_bundle.py
+```
+
+The build script rejects a Python environment whose installed versions differ
+from the lock. The smoke test launches the frozen service, loads its React page,
+creates a local dataset, saves an annotation, then stops and restarts the service
+and verifies the dataset and annotation read back. Output is written to
+`dist/annotation-web/`; it is a local build artifact and is not committed. This
+profile has only been built and exercised as CPython 3.11 AMD64 on Windows ARM64
+emulation; native ARM64 and a Tauri installer remain unverified.
 
 ## Local model support
 
