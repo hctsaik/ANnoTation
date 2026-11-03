@@ -337,6 +337,62 @@ test("imports a local YOLO model through React into app data without exposing it
   expect(await readFile(join(appDataDir, "models", "yolo", `${modelHash}.pt`))).toEqual(modelBytes);
 });
 
+test("runs real local YOLO CPU pre-labeling through React", async ({ page }) => {
+  const modelPath = process.env.ANNOTATION_E2E_YOLO_MODEL;
+  const imagePath = process.env.ANNOTATION_E2E_YOLO_IMAGE;
+  test.skip(!modelPath || !imagePath, "Set ANNOTATION_E2E_YOLO_MODEL and ANNOTATION_E2E_YOLO_IMAGE to run real model inference");
+  test.setTimeout(180_000);
+  if (!modelPath || !imagePath) return;
+
+  await stopLocalService();
+  temporaryRoot = await mkdtemp(join(tmpdir(), "annotation-real-yolo-e2e-"));
+  temporaryRoots.push(temporaryRoot);
+  appDataDir = join(temporaryRoot, "app data");
+  sourceDir = join(temporaryRoot, "model dataset");
+  await mkdir(sourceDir, { recursive: true });
+  const imageName = imagePath.split(/[\\/]/).at(-1) || "inference-image.jpg";
+  const imageBytes = await readFile(imagePath);
+  await writeFile(join(sourceDir, imageName), imageBytes);
+  const modelBytes = await readFile(modelPath);
+  const modelHash = createHash("sha256").update(modelBytes).digest("hex");
+  servicePort = await freeLoopbackPort();
+  serviceProcess = await startLocalService();
+
+  await page.goto(`http://127.0.0.1:${servicePort}`);
+  await page.getByRole("navigation", { name: "工作流程" }).getByRole("button", { name: "資料集" }).click();
+  await page.getByLabel("資料夾路徑").fill(sourceDir);
+  await page.getByLabel("資料集名稱").fill("Real local YOLO inference");
+  await page.getByRole("button", { name: /建立資料集並開始標注/ }).click();
+  await expect(page.getByRole("heading", { name: "標注工作台" })).toBeVisible();
+
+  await page.getByLabel("匯入本機 YOLO 模型").setInputFiles({
+    name: modelPath.split(/[\\/]/).at(-1) || "local-model.pt",
+    mimeType: "application/octet-stream",
+    buffer: modelBytes,
+  });
+  const modelField = page.getByRole("textbox", { name: "模型檔案路徑" });
+  await expect(modelField).toHaveValue(modelPath.split(/[\\/]/).at(-1) || "local-model.pt");
+  expect(await modelField.inputValue()).not.toContain(temporaryRoot);
+  await expect(page.getByText(/本機模型 .* 已保存至 ANnoTation App data/)).toBeVisible();
+  expect(await readFile(join(appDataDir, "models", "yolo", `${modelHash}.pt`))).toEqual(modelBytes);
+
+  await page.getByRole("button", { name: /對此圖執行/ }).click();
+  const completion = page.getByText(/AI 預標注完成：1 張、\d+ 個框/);
+  await expect(completion).toBeVisible({ timeout: 150_000 });
+  const detectedCount = Number((await completion.textContent())?.match(/、(\d+) 個框/)?.[1] ?? 0);
+  expect(detectedCount).toBeGreaterThan(0);
+
+  const sidecar = JSON.parse(await readFile(join(sourceDir, imageName.replace(/\.[^.]+$/, ".json")), "utf8")) as {
+    imageHeight: number;
+    imageWidth: number;
+    shapes: Array<{ label: string; score: number; shape_type: string }>;
+  };
+  expect(sidecar.imageHeight).toBeGreaterThan(0);
+  expect(sidecar.imageWidth).toBeGreaterThan(0);
+  expect(sidecar.shapes).toHaveLength(detectedCount);
+  expect(sidecar.shapes.every((shape) => shape.label && shape.score > 0 && shape.shape_type === "rectangle")).toBe(true);
+});
+
 test("renders every supported local image format and honors recursive scanning", async ({ page }) => {
   test.setTimeout(60_000);
   temporaryRoot = await mkdtemp(join(tmpdir(), "annotation-format-matrix-e2e-"));
