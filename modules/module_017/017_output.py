@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from annotation_runtime import shared_root, app_root
+
 import importlib.util
 import importlib.util as _ilu
 import json
@@ -12,17 +14,17 @@ _HERE = Path(__file__).parent
 _PROCESS_FILE = _HERE / "017_process.py"
 
 _mdb_spec = _ilu.spec_from_file_location(
-    "_manifest_db_017", _HERE.parents[3] / "scripts" / "shared" / "_manifest_db.py"
+    "_manifest_db_017", shared_root() / "_manifest_db.py"
 )
 _mdb = _ilu.module_from_spec(_mdb_spec)
 _mdb_spec.loader.exec_module(_mdb)
 
-_help_spec = _ilu.spec_from_file_location("_help", _HERE.parents[3] / "scripts" / "shared" / "_help.py")
+_help_spec = _ilu.spec_from_file_location("_help", shared_root() / "_help.py")
 _help = _ilu.module_from_spec(_help_spec)
 _help_spec.loader.exec_module(_help)
 
 _CIM_LOG_DIR = Path(os.environ.get(
-    "CIM_LOG_DIR", str(Path(__file__).parents[6] / "tmp" / "cim_log")
+    "CIM_LOG_DIR", str(app_root() / "tmp" / "cim_log")
 ))
 
 
@@ -279,6 +281,9 @@ def _render_review_summary(manifest_id: str) -> None:
 
 
 def _render_last_sync(manifest_id: str) -> None:
+    if os.environ.get("ANNOTATION_STANDALONE") == "1":
+        st.caption("CIM Sync Back is not configured for this standalone local workspace.")
+        return
     try:
         _cfg013_spec = _ilu.spec_from_file_location(
             "_013_config",

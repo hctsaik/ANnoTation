@@ -6,6 +6,8 @@ platform's Input/Output split to operators.
 """
 from __future__ import annotations
 
+from annotation_runtime import shared_root, app_root
+
 import importlib.util
 import json
 import sys
@@ -32,11 +34,7 @@ _output = _load("_012_workspace_output", "012_output.py")
 
 # _manifest_db lives outside this module folder. Support both the packaged
 # plugins/labeling/modules layout and the legacy scripts/module_012 runtime.
-_shared_candidates = (
-    _HERE.parent / "shared",
-    _HERE.parents[3] / "scripts" / "shared",
-)
-_shared_dir = next((path for path in _shared_candidates if path.exists()), _shared_candidates[-1])
+_shared_dir = shared_root()
 _mdb_spec = importlib.util.spec_from_file_location(
     "_012_workspace_manifest_db",
     _shared_dir / "_manifest_db.py",
@@ -250,7 +248,10 @@ def _render_dataset_stage() -> None:
     with source_tab:
         _render_composed_feature("data", "026|010", "建立資料集並開始標注")
     with labels_tab:
-        _render_composed_feature("labels", "017", "掃描標籤與影響")
+        if _mdb.list_manifests(_cfg.get_manifest_db_path()):
+            _render_composed_feature("labels", "017", "掃描標籤與影響")
+        else:
+            st.info("請先建立資料集，再管理標籤。")
 
 
 def _load_from(directory: Path, name: str, filename: str):

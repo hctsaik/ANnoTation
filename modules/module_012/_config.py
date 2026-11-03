@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from annotation_runtime import shared_root, app_root
+
 import importlib.util as _ilu
 import json
 from pathlib import Path
@@ -10,7 +12,7 @@ from pathlib import Path
 # enhanced dir, xany work dir) stay here. Paths are byte-for-byte identical
 # because _base.log_dir() resolves to the same CIM_LOG_DIR.
 _HERE = Path(__file__).parent
-_spec = _ilu.spec_from_file_location("_config_base", _HERE.parents[3] / "scripts" / "shared" / "_config_base.py")
+_spec = _ilu.spec_from_file_location("_config_base", shared_root() / "_config_base.py")
 _base = _ilu.module_from_spec(_spec)
 _spec.loader.exec_module(_base)
 

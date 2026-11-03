@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from annotation_runtime import shared_root, app_root
+
 import importlib.util as _ilu
 import io
 from pathlib import Path
@@ -12,11 +14,11 @@ _cfg_spec = _ilu.spec_from_file_location("_026_config", _HERE / "_config.py")
 _cfg = _ilu.module_from_spec(_cfg_spec)
 _cfg_spec.loader.exec_module(_cfg)
 
-_mdb_spec = _ilu.spec_from_file_location("_manifest_db", _HERE.parents[3] / "scripts" / "shared" / "_manifest_db.py")
+_mdb_spec = _ilu.spec_from_file_location("_manifest_db", shared_root() / "_manifest_db.py")
 _mdb = _ilu.module_from_spec(_mdb_spec)
 _mdb_spec.loader.exec_module(_mdb)
 
-_help_spec = _ilu.spec_from_file_location("_help", _HERE.parents[3] / "scripts" / "shared" / "_help.py")
+_help_spec = _ilu.spec_from_file_location("_help", shared_root() / "_help.py")
 _help = _ilu.module_from_spec(_help_spec)
 _help_spec.loader.exec_module(_help)
 
@@ -89,12 +91,6 @@ def render_output(result: dict) -> None:
 
     if mode == "error":
         err = result.get("error", "未知錯誤")
-        try:
-            from core import guidance  # noqa: PLC0415
-            if guidance.render(err, st):  # actionable card for known failures
-                return
-        except Exception:
-            pass
         st.error(f"❌ {err}")
         return
 

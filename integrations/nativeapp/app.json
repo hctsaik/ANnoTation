@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "app_id": "annotation-standalone",
+  "version": "0.1.0-dev",
+  "title": "ANnoTation (Streamlit)",
+  "integration_mode": "adapted",
+  "host_compat": {
+    "min": "0.1.0"
+  },
+  "protocol_version": 1,
+  "ui": {
+    "loader": "streamlit",
+    "entry": "app.py"
+  },
+  "backend": {
+    "kind": "managed_python",
+    "lock_file": "requirements/production.lock"
+  },
+  "sheets": [
+    "sheets/workspace.json"
+  ],
+  "launch_profile": "launchers/streamlit.json",
+  "grants": [
+    "folder_read",
+    "folder_write"
+  ],
+  "data_schema": {
+    "version": "1",
+    "rollback_compatible": [
+      "1"
+    ]
+  }
+}

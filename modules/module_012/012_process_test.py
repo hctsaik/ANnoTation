@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 _HERE = Path(__file__).parent
-_SHARED = _HERE.parents[3] / "scripts" / "shared" / "_manifest_db.py"
+_SHARED = _HERE.parents[1] / "annotation_runtime" / "_manifest_db.py"
 
 
 def _load_module(path: Path, name: str):
@@ -38,7 +38,7 @@ def test_execute_logic_detects_same_directory_xanylabeling_json(tmp_path, monkey
     )
 
     manifest_id = "manifest_012"
-    db_path = cim_log / "db" / "manifest.sqlite"
+    db_path = cim_log / "db" / "annotation-standalone-v1.sqlite"
     mdb.create_manifest(
         db_path,
         manifest_id,
@@ -95,7 +95,7 @@ def test_execute_logic_defaults_autorefresh_to_10_seconds(tmp_path, monkeypatch)
     img.write_bytes(b"fake image bytes")
 
     manifest_id = "manifest_default_refresh"
-    db_path = cim_log / "db" / "manifest.sqlite"
+    db_path = cim_log / "db" / "annotation-standalone-v1.sqlite"
     mdb.create_manifest(
         db_path,
         manifest_id,
@@ -149,7 +149,7 @@ def test_execute_logic_detects_labelme_exe_from_env(tmp_path, monkeypatch):
     img.write_bytes(b"fake image bytes")
 
     manifest_id = "manifest_labelme"
-    db_path = cim_log / "db" / "manifest.sqlite"
+    db_path = cim_log / "db" / "annotation-standalone-v1.sqlite"
     mdb.create_manifest(
         db_path,
         manifest_id,

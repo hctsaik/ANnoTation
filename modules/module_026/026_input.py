@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from annotation_runtime import shared_root, app_root
+
 import importlib.util as _ilu
 import subprocess
 import sys
@@ -13,11 +15,7 @@ _cfg_spec = _ilu.spec_from_file_location("_026_config", _HERE / "_config.py")
 _cfg = _ilu.module_from_spec(_cfg_spec)
 _cfg_spec.loader.exec_module(_cfg)
 
-_ui_spec = _ilu.spec_from_file_location("_ui_components", _HERE.parents[3] / "scripts" / "shared" / "ui_components.py")
-_ui = _ilu.module_from_spec(_ui_spec)
-_ui_spec.loader.exec_module(_ui)
-
-_help_spec = _ilu.spec_from_file_location("_help", _HERE.parents[3] / "scripts" / "shared" / "_help.py")
+_help_spec = _ilu.spec_from_file_location("_help", shared_root() / "_help.py")
 _help = _ilu.module_from_spec(_help_spec)
 _help_spec.loader.exec_module(_help)
 
@@ -29,8 +27,8 @@ _ANT_ACTIVE_ICON  = {0: "⚪", 1: "🟠", 2: "🟢"}
 
 def _get_service():
     import os
-    from plugins.labeling.domain.services import AnnotationService
-    from plugins.labeling.domain.storage.workspace import AnnotationWorkspace
+    from domain.services import AnnotationService
+    from domain.storage.workspace import AnnotationWorkspace
     ws_path = _cfg.get_annotation_workspace_path()
     return AnnotationService(AnnotationWorkspace(ws_path))
 
@@ -334,15 +332,15 @@ def _render_iwsc() -> dict:
 
 def render_input() -> dict:
     _help.render_help_button("module_026", "input", "📥 資料來源 — 使用說明")
-    _ui.inject_streamlit_zh_overrides()
 
     cfg = _cfg.load_config()
 
-    MODE_OPTIONS = ["📁 本地資料夾", "🔌 外部任務系統"]
+    MODE_OPTIONS = ["📁 本地資料夾"]
+    st.caption("此獨立版本提供本機資料來源；CIM 外部任務系統尚未配置。")
     MODE_MAP     = {"📁 本地資料夾": "local", "🔌 外部任務系統": "iwsc"}
     MODE_LABEL   = {"local": "📁 本地資料夾", "iwsc": "🔌 外部任務系統"}
 
-    default_label = MODE_LABEL.get(cfg.get("last_mode", "local"), "📁 本地資料夾")
+    default_label = "📁 本地資料夾"
     sel_label = st.radio("來源類型", MODE_OPTIONS,
                          index=MODE_OPTIONS.index(default_label),
                          horizontal=True, key="m026_mode")

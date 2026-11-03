@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from annotation_runtime import shared_root, app_root
+
 """
 012_output.py — Annotation Session 輸出 UI。
 
@@ -32,7 +34,6 @@ _log = logging.getLogger("m012_output")
 
 import streamlit as st
 import streamlit.components.v1 as components
-from streamlit_autorefresh import st_autorefresh
 
 # ─── 動態載入 _config + _manifest_db ─────────────────────────────────────────
 
@@ -47,7 +48,7 @@ _external_tools = _ilu.module_from_spec(_tools_spec)
 _tools_spec.loader.exec_module(_external_tools)
 
 _mdb_spec = _ilu.spec_from_file_location(
-    "_manifest_db", _HERE.parents[3] / "scripts" / "shared" / "_manifest_db.py"
+    "_manifest_db", shared_root() / "_manifest_db.py"
 )
 _mdb = _ilu.module_from_spec(_mdb_spec)
 _mdb_spec.loader.exec_module(_mdb)
@@ -60,7 +61,7 @@ _AI_CFG_SPEC = _ilu.spec_from_file_location(
 _ai_cfg = _ilu.module_from_spec(_AI_CFG_SPEC)
 _AI_CFG_SPEC.loader.exec_module(_ai_cfg)
 
-_help_spec = _ilu.spec_from_file_location("_help", _HERE.parents[3] / "scripts" / "shared" / "_help.py")
+_help_spec = _ilu.spec_from_file_location("_help", shared_root() / "_help.py")
 _help = _ilu.module_from_spec(_help_spec)
 _help_spec.loader.exec_module(_help)
 
@@ -527,7 +528,7 @@ def _launch_isat(file_path: str, isat_exe: str) -> str | None:
 def _launch_tool(tool_id: str, file_path: str, exe_override: str | None = None) -> str | None:
     """Unified tool launch via ToolRegistry. Returns error string or None on success."""
     try:
-        from plugins.labeling.domain.tools.registry import get_tool_registry
+        from domain.tools.registry import get_tool_registry
         _, adapter = get_tool_registry().get(tool_id)
         return adapter.launch_file(file_path, {"executable_override": exe_override})
     except Exception as exc:
@@ -1269,7 +1270,7 @@ def _dataset_class_list(image_path: str) -> list[str]:
         img_dir = Path(image_path).parent
         folder = img_dir.parent if img_dir.name.lower() == "images" else img_dir
         try:
-            from plugins.labeling.domain.yolo_xany_seed import find_class_source
+            from domain.yolo_xany_seed import find_class_source
             names = find_class_source(folder).names
             if names:
                 return names
@@ -1382,7 +1383,7 @@ def render_output(result: dict, *, show_help: bool = True) -> None:
         autorefresh_seconds = max(autorefresh_seconds, 30)
 
     if autorefresh_enabled:
-        st_autorefresh(
+        __import__("streamlit_autorefresh").st_autorefresh(
             interval=autorefresh_seconds * 1000,
             key="m012_annotation_autorefresh",
         )

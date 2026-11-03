@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from plugins.labeling.domain.tools.contracts import LabelingToolAdapter, ToolDescriptor
+from domain.tools.contracts import LabelingToolAdapter, ToolDescriptor
 
 
 class ToolRegistry:
@@ -47,7 +47,7 @@ _registry: ToolRegistry | None = None
 def get_tool_registry() -> ToolRegistry:
     global _registry
     if _registry is None:
-        from plugins.labeling.domain.tools.builtins import register_builtins
+        from domain.tools.builtins import register_builtins
         _registry = ToolRegistry()
         register_builtins(_registry)
     return _registry

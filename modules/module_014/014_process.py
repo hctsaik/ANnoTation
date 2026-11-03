@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from annotation_runtime import shared_root, app_root
+
 """
 014_process.py — Export 核心邏輯
 無 Streamlit import。
@@ -30,12 +32,12 @@ _cfg = _ilu.module_from_spec(_cfg_spec)
 _cfg_spec.loader.exec_module(_cfg)
 
 _mdb_spec = _ilu.spec_from_file_location(
-    "_manifest_db", _HERE.parents[3] / "scripts" / "shared" / "_manifest_db.py"
+    "_manifest_db", shared_root() / "_manifest_db.py"
 )
 _mdb = _ilu.module_from_spec(_mdb_spec)
 _mdb_spec.loader.exec_module(_mdb)
 
-_PROJECT_ROOT = Path(__file__).parents[6]
+_PROJECT_ROOT = app_root()
 _CIM_LOG_DIR = Path(os.environ.get("CIM_LOG_DIR", str(_PROJECT_ROOT / "tmp" / "cim_log")))
 
 

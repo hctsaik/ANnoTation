@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from annotation_runtime import shared_root, app_root
+
 """
 module_010/010_process.py — Data Feeder 處理層。
 無 Streamlit import。
@@ -17,14 +19,14 @@ from uuid import uuid4
 
 # ─── 路徑常數 ─────────────────────────────────────────────────────────────────
 
-_PROJECT_ROOT = Path(__file__).parents[6]  # nativeApp
+_PROJECT_ROOT = app_root()  # nativeApp
 _CIM_LOG_DIR = Path(os.environ.get("CIM_LOG_DIR", str(_PROJECT_ROOT / "tmp" / "cim_log")))
 
 # ─── 動態載入 _manifest_db ────────────────────────────────────────────────────
 
 _HERE = Path(__file__).parent
 _spec = _ilu.spec_from_file_location(
-    "_manifest_db", _HERE.parents[3] / "scripts" / "shared" / "_manifest_db.py"
+    "_manifest_db", shared_root() / "_manifest_db.py"
 )
 _mdb = _ilu.module_from_spec(_spec)
 _spec.loader.exec_module(_mdb)

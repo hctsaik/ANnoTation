@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "sheet_id": "annotation-standalone-workspace",
+  "title": "ANnoTation",
+  "features": [
+    {
+      "feature_id": "annotation-standalone-main",
+      "title": "ANnoTation",
+      "app_ref": "annotation-standalone",
+      "entry_ref": "app.py",
+      "view_mode": "iframe",
+      "keep_alive": true,
+      "close_policy": "prompt"
+    }
+  ]
+}

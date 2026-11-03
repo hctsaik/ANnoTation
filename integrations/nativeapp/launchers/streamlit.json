@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "profile_id": "annotation-standalone",
+  "loader": "streamlit",
+  "cwd": ".",
+  "entry": "app.py",
+  "env_allowlist": [
+    "APP_DATA_DIR"
+  ],
+  "managed_env": {
+    "APP_DATA_DIR": "{data_dir}"
+  },
+  "readiness": {
+    "http_path": "/_stcore/health",
+    "timeout_s": 60
+  },
+  "stop": {
+    "grace_s": 5,
+    "kill_process_tree": true
+  }
+}

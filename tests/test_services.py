@@ -57,8 +57,8 @@ def test_register_and_list_tenants(tmp_path: Path) -> None:
 
 def test_delete_tenant_removes_it_and_cascades(tmp_path: Path) -> None:
     """Deleting a tenant removes only that tenant and cascades its user
-    mappings (admin can clean up a test connection). Guards module_022's
-    delete-connection feature end-to-end (service + sqlite cascade)."""
+    mappings (admin can clean up a test connection). Guards Management
+    Center's delete-connection feature end-to-end (service + sqlite cascade)."""
     svc = _service(tmp_path)
     t1 = svc.register_tenant("System-A", "fake://host-a", "coco")["tenant_id"]
     t2 = svc.register_tenant("System-B", "fake://host-b", "coco")["tenant_id"]

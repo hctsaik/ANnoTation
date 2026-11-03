@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 
 _HERE = Path(__file__).parent
-_SHARED = _HERE.parents[3] / "scripts" / "shared" / "_manifest_db.py"
-_ENGINE_ROOT = _HERE.parents[4]
+_SHARED = _HERE.parents[1] / "annotation_runtime" / "_manifest_db.py"
+_ENGINE_ROOT = _HERE.parents[1]
 
 if str(_ENGINE_ROOT) not in sys.path:
     sys.path.insert(0, str(_ENGINE_ROOT))
@@ -23,7 +23,7 @@ def _load(path: Path, name: str):
 
 
 def _make_manifest(cim_log: Path, mdb, mid: str, items: list[dict]):
-    db_path = cim_log / "db" / "manifest.sqlite"
+    db_path = cim_log / "db" / "annotation-standalone-v1.sqlite"
     mdb.init_db(db_path)
     mdb.create_manifest(db_path, mid, f"Test {mid}", "folder", {})
     mdb.add_manifest_items(db_path, mid, items)
@@ -307,7 +307,7 @@ def test_execute_logic_dashboard_classifications(tmp_path, monkeypatch):
         {"item_id": "i2", "file_path": str(img2), "width": 640, "height": 480},
     ])
 
-    clf_path = cim_log / "config" / f"module_012_classifications_{mid[:12]}.json"
+    clf_path = cim_log / "config" / f"module_012_classifications_{proc._cfg._manifest_key(mid)}.json"
     clf_path.parent.mkdir(parents=True, exist_ok=True)
     clf_path.write_text(json.dumps({"i2": "cat"}), encoding="utf-8")
 
@@ -326,7 +326,7 @@ def test_execute_logic_dashboard_export_history(tmp_path, monkeypatch):
     proc = _load(_HERE / "017_process.py", "_017_proc_exp")
 
     mid = "m017_exp"
-    db_path = cim_log / "db" / "manifest.sqlite"
+    db_path = cim_log / "db" / "annotation-standalone-v1.sqlite"
     mdb.init_db(db_path)
     mdb.create_manifest(db_path, mid, "Export Test", "folder", {})
 

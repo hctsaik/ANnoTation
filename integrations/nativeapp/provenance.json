@@ -1,0 +1,27 @@
+{
+  "kind": "annotation.integration-package-provenance",
+  "schema_version": 1,
+  "maintained_package": "nativeApp_v2/integrations/annotation-standalone",
+  "files": [
+    {
+      "path": "app.json",
+      "sha256": "f2223f188cc6db42756d4fbf36a5933e605468a278a1295f4553ddf095dd6f25"
+    },
+    {
+      "path": "recipe.json",
+      "sha256": "f5b880b604e67bd47a85a9572ce0ce51c318f89a91b6bb7502850e9dcf357739"
+    },
+    {
+      "path": "launchers/streamlit.json",
+      "sha256": "3cef5abd1c9bb0a70d8975fdb730d391db0709e349d63c5aae46e248fc42c906"
+    },
+    {
+      "path": "sheets/workspace.json",
+      "sha256": "47a1b37b3143588ba4212ba07f0ebacb0c410a58ca119bc0a9c010d6ec17db5d"
+    },
+    {
+      "path": "requirements/production.lock",
+      "sha256": "de85ca89605fcb7181eb08c90d04fa25c6f2dea3e1091889b57c28fbb5aad0b9"
+    }
+  ]
+}

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from annotation_runtime import shared_root, app_root
+
 import csv
 import importlib.util as _ilu
 import io
@@ -12,7 +14,7 @@ import streamlit as st
 _HERE = Path(__file__).parent
 
 _mdb_spec = _ilu.spec_from_file_location(
-    "_manifest_db", _HERE.parents[3] / "scripts" / "shared" / "_manifest_db.py"
+    "_manifest_db", shared_root() / "_manifest_db.py"
 )
 _mdb = _ilu.module_from_spec(_mdb_spec)
 _mdb_spec.loader.exec_module(_mdb)
@@ -21,11 +23,11 @@ _cfg_spec = _ilu.spec_from_file_location("_010_config", _HERE / "_config.py")
 _cfg = _ilu.module_from_spec(_cfg_spec)
 _cfg_spec.loader.exec_module(_cfg)
 
-_help_spec = _ilu.spec_from_file_location("_help", _HERE.parents[3] / "scripts" / "shared" / "_help.py")
+_help_spec = _ilu.spec_from_file_location("_help", shared_root() / "_help.py")
 _help = _ilu.module_from_spec(_help_spec)
 _help_spec.loader.exec_module(_help)
 
-_PROJECT_ROOT = Path(__file__).parents[6]
+_PROJECT_ROOT = app_root()
 _CIM_LOG_DIR = Path(os.environ.get("CIM_LOG_DIR", str(_PROJECT_ROOT / "tmp" / "cim_log")))
 
 _SOURCE_LABEL = {"folder": "📁 資料夾", "db": "🗄️ 資料庫", "api": "🌐 API"}

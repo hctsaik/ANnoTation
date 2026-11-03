@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 _HERE = Path(__file__).parent
-_SHARED = _HERE.parents[3] / "scripts" / "shared" / "_manifest_db.py"
+_SHARED = _HERE.parents[1] / "annotation_runtime" / "_manifest_db.py"
 
 
 def _load(path: Path, name: str):
@@ -23,7 +23,7 @@ def _setup_manifest(tmp_path, mdb, monkeypatch, images: list[dict]):
     """Helper: 建立 manifest + items，回傳 (db_path, manifest_id)。"""
     cim_log = tmp_path / "cim_log"
     monkeypatch.setenv("CIM_LOG_DIR", str(cim_log))
-    db_path = cim_log / "db" / "manifest.sqlite"
+    db_path = cim_log / "db" / "annotation-standalone-v1.sqlite"
     mdb.init_db(db_path)
     mid = "manifest_014_test"
     mdb.create_manifest(db_path, mid, "Test Manifest", "folder", {})
@@ -252,7 +252,7 @@ def test_execute_logic_full_pipeline(tmp_path, monkeypatch):
                     "points": [[0, 0], [100, 80]]}],
     }), encoding="utf-8")
 
-    db_path = cim_log / "db" / "manifest.sqlite"
+    db_path = cim_log / "db" / "annotation-standalone-v1.sqlite"
     mdb.init_db(db_path)
     mid = "manifest_014_test"
     mdb.create_manifest(db_path, mid, "Test Manifest", "folder", {})
@@ -260,7 +260,7 @@ def test_execute_logic_full_pipeline(tmp_path, monkeypatch):
         [{"item_id": "i1", "file_path": str(src), "width": 640, "height": 480}])
 
     # 寫分類結果
-    clf_path = cim_log / "config" / f"module_012_classifications_{mid[:12]}.json"
+    clf_path = cim_log / "config" / f"module_012_classifications_{proc._cfg._manifest_key(mid)}.json"
     clf_path.parent.mkdir(parents=True, exist_ok=True)
     clf_path.write_text(json.dumps({"i1": "cat"}), encoding="utf-8")
 
@@ -297,7 +297,7 @@ def test_execute_logic_iwsc_deliver_only_does_not_silently_export(tmp_path, monk
     src = tmp_path / "img001.jpg"
     src.write_bytes(b"img")
 
-    db_path = cim_log / "db" / "manifest.sqlite"
+    db_path = cim_log / "db" / "annotation-standalone-v1.sqlite"
     mdb.init_db(db_path)
     mid = "manifest_014_iwsc"
     mdb.create_manifest(db_path, mid, "Test Manifest", "folder", {})
@@ -325,7 +325,7 @@ def test_execute_logic_no_formats_selected_yields_empty_export_paths(tmp_path, m
     src = tmp_path / "img001.jpg"
     src.write_bytes(b"img")
 
-    db_path = cim_log / "db" / "manifest.sqlite"
+    db_path = cim_log / "db" / "annotation-standalone-v1.sqlite"
     mdb.init_db(db_path)
     mid = "manifest_014_noformat"
     mdb.create_manifest(db_path, mid, "Test Manifest", "folder", {})
@@ -355,7 +355,7 @@ def test_execute_logic_invalid_export_dir_returns_error_not_raise(tmp_path, monk
     src = tmp_path / "img001.jpg"
     src.write_bytes(b"img")
 
-    db_path = cim_log / "db" / "manifest.sqlite"
+    db_path = cim_log / "db" / "annotation-standalone-v1.sqlite"
     mdb.init_db(db_path)
     mid = "manifest_014_badpath"
     mdb.create_manifest(db_path, mid, "Test Manifest", "folder", {})
@@ -381,7 +381,7 @@ def test_execute_logic_missing_manifest(tmp_path, monkeypatch):
     mdb = _load(_SHARED, "_mdb_014_miss")
     proc = _load(_HERE / "014_process.py", "_014_proc_miss")
 
-    mdb.init_db(cim_log / "db" / "manifest.sqlite")
+    mdb.init_db(cim_log / "db" / "annotation-standalone-v1.sqlite")
 
     result = proc.execute_logic({"manifest_id": "nonexistent"})
     assert result["mode"] == "error"
@@ -496,7 +496,7 @@ def test_execute_logic_blocked_on_error(tmp_path, monkeypatch):
                                 "points": [[10, 10], [10, 50]]}]}),
         encoding="utf-8",
     )
-    db_path = cim_log / "db" / "manifest.sqlite"
+    db_path = cim_log / "db" / "annotation-standalone-v1.sqlite"
     mdb.init_db(db_path)
     mid = "m014_blk"
     mdb.create_manifest(db_path, mid, "Block Test", "folder", {})

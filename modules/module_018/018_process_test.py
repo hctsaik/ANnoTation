@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 
 _HERE = Path(__file__).parent
-_SHARED = _HERE.parents[3] / "scripts" / "shared" / "_manifest_db.py"
-_ENGINE_ROOT = _HERE.parents[4]
+_SHARED = _HERE.parents[1] / "annotation_runtime" / "_manifest_db.py"
+_ENGINE_ROOT = _HERE.parents[1]
 
 if str(_ENGINE_ROOT) not in sys.path:
     sys.path.insert(0, str(_ENGINE_ROOT))
@@ -23,7 +23,7 @@ def _load(path: Path, name: str):
 
 
 def _make_manifest(cim_log: Path, mdb, mid: str, items: list[dict]):
-    db_path = cim_log / "db" / "manifest.sqlite"
+    db_path = cim_log / "db" / "annotation-standalone-v1.sqlite"
     mdb.init_db(db_path)
     mdb.create_manifest(db_path, mid, f"Test {mid}", "folder", {})
     mdb.add_manifest_items(db_path, mid, items)

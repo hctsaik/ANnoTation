@@ -551,6 +551,20 @@ const CFG = __CFG__;
 """.replace("__CFG__", cfg)
 
 
+def save_canvas_annotation(image_path: str, boxes: list[dict], width: int, height: int) -> dict:
+    """Persist the same Canvas payload used by the UI without changing source media."""
+    from annotation_runtime._config_base import atomic_write
+    path = Path(image_path).with_suffix(".json")
+    # Refuse invalid existing JSON instead of discarding annotations on a save.
+    existing = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    keep = [shape for shape in existing.get("shapes", []) if shape.get("shape_type") != "rectangle"]
+    generated = _canvas_boxes_to_sidecar(boxes, Path(image_path).name, width, height, keep_shapes=keep)
+    result = {**existing, **generated}
+    result["flags"] = existing.get("flags", generated["flags"])
+    atomic_write(path, json.dumps(result, ensure_ascii=False, indent=2))
+    return result
+
+
 def render_canvas_editor(image_path: str, classes: list[str], *, key: str,
                          height: int = 720) -> bool:
     """在 Streamlit 渲染編輯器;存檔時寫回 sidecar。回傳 True 表示本次有存檔。
@@ -587,11 +601,8 @@ def render_canvas_editor(image_path: str, classes: list[str], *, key: str,
             _boxes = data.get("boxes", [])
             # 只在看到「新的」nonce 時寫檔，避免每次 rerun 重複寫。
             if _nonce and st.session_state.get(_nonce_key) != _nonce:
+                sidecar = save_canvas_annotation(image_path, _boxes, iw, ih)
                 st.session_state[_nonce_key] = _nonce
-                sidecar = _canvas_boxes_to_sidecar(
-                    _boxes, Path(image_path).name, iw, ih, keep_shapes=keep_shapes)
-                sidecar_path.write_text(
-                    json.dumps(sidecar, ensure_ascii=False, indent=2), encoding="utf-8")
                 saved = True
                 st.toast(f"已存檔 {len(sidecar['shapes'])} 個框 → {sidecar_path.name}")
         except Exception as exc:  # noqa: BLE001

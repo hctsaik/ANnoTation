@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from math import isfinite
 from typing import Any
 
-from plugins.labeling.domain.core.models import (
+from domain.core.models import (
     Annotation,
     AnnotationSet,
     BBoxGeometry,

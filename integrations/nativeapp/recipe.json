@@ -1,0 +1,109 @@
+{
+  "kind": "nativeapp.integration-recipe",
+  "schema_version": 1,
+  "app": {
+    "id": "annotation-standalone",
+    "title": "ANnoTation (Streamlit)",
+    "version": "0.1.0-dev"
+  },
+  "template": "streamlit-v1",
+  "content": {
+    "app": [
+      {
+        "root": "source",
+        "path": "app.py"
+      },
+      {
+        "root": "source",
+        "path": "annotation_runtime"
+      },
+      {
+        "root": "source",
+        "path": "domain"
+      },
+      {
+        "root": "source",
+        "path": "modules"
+      },
+      {
+        "root": "source",
+        "path": "requirements-standalone.txt"
+      }
+    ],
+    "integration": [
+      {
+        "root": "integration",
+        "path": "app.json"
+      },
+      {
+        "root": "integration",
+        "path": "requirements/production.lock"
+      },
+      {
+        "root": "integration",
+        "path": "launchers"
+      },
+      {
+        "root": "integration",
+        "path": "sheets"
+      }
+    ]
+  },
+  "runtimes": {
+    "app": {
+      "format": "cpython-wheelhouse-v1",
+      "requirements": {
+        "root": "integration",
+        "path": "requirements/production.lock"
+      },
+      "python_template": "cpython-3.11.9-win_amd64-cpu-v1"
+    }
+  },
+  "launch": {
+    "runtime": "app",
+    "entry": {
+      "kind": "python_script",
+      "path": {
+        "root": "app",
+        "path": "app.py"
+      }
+    },
+    "args": [],
+    "env": {
+      "APP_DATA_DIR": "${roots.data}"
+    },
+    "readiness": {
+      "mode": "http",
+      "http_path": "/_stcore/health",
+      "timeout_s": 60
+    },
+    "cwd": {
+      "root": "app",
+      "path": "."
+    },
+    "inherit_env": [],
+    "stop": {
+      "grace_s": 5,
+      "kill_process_tree": true
+    }
+  },
+  "data": {
+    "mode": "private-single-writer",
+    "schema_version": "1",
+    "migration": "none"
+  },
+  "checks": [
+    {
+      "id": "local-annotation-reopen",
+      "steps": [
+        "Create a dataset from a disposable image folder.",
+        "Save a rectangle using the existing Canvas editor, review it and export.",
+        "Stop and reopen the App and the same dataset."
+      ],
+      "expected": "Annotation and review persist, export is readable, original image bytes are unchanged."
+    }
+  ],
+  "metadata": {
+    "description": "Independent ANnoTation Streamlit local workflow; distinct from visionLabel. App-owned fresh v1 database rejects legacy databases. Model tools and CIM connectors are outside local workflow acceptance."
+  }
+}

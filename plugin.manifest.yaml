@@ -64,11 +64,15 @@ provides:
       - { id: module_018, slug: review-gallery,           name: Review Gallery }
       - { id: module_020, slug: upload-history,           name: 我的上傳記錄 }
       - { id: module_026, slug: data-source,              name: 資料來源 }
-    # Deprecated (enabled:false in plugin.yaml; code retained, not deleted — CLAUDE.md rule)
-    deprecated:
+    # Disabled compatibility libraries still loaded by active modules. Keep
+    # their source until module_026 owns the shared implementation directly.
+    deprecated_runtime_dependencies:
       - module_010   # Data Feeder → folded into module_026
-      - module_011   # → module_014
       - module_019   # Data Downloader → module_026
+    # Removed legacy tool IDs. Existing platform databases still disable these
+    # IDs during catalog migration, but no source module remains in this plugin.
+    removed:
+      - module_011   # result sink → module_013/module_014
       - module_022   # 標註權限管理 → 管理中心
       - module_023   # 標註任務 → module_026
       - module_024   # 標注工作台(iWISC) → module_012

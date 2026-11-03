@@ -7,10 +7,10 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from plugins.labeling.domain.tools.contracts import RuntimeStatus, ToolDescriptor
+from domain.tools.contracts import RuntimeStatus, ToolDescriptor
 
 if TYPE_CHECKING:
-    from plugins.labeling.domain.tools.registry import ToolRegistry
+    from domain.tools.registry import ToolRegistry
 
 
 # ── X-AnyLabeling adapter ────────────────────────────────────────────────────
@@ -20,14 +20,14 @@ class _XAnyLabelingAdapter:
     def get_executable(self, executable_override: str | None = None) -> str:
         if executable_override and Path(executable_override).exists():
             return executable_override
-        from plugins.labeling.domain.adapters.xanylabeling_runtime import detect_xanylabeling
+        from domain.adapters.xanylabeling_runtime import detect_xanylabeling
         install = detect_xanylabeling()
         return install.executable or "xanylabeling"
 
     def detect(self, executable_override: str | None = None) -> RuntimeStatus:
-        from plugins.labeling.domain.adapters.xanylabeling_runtime import detect_xanylabeling
+        from domain.adapters.xanylabeling_runtime import detect_xanylabeling
         if executable_override and Path(executable_override).exists():
-            from plugins.labeling.domain.adapters.xanylabeling_runtime import _read_version
+            from domain.adapters.xanylabeling_runtime import _read_version
             v = _read_version(executable_override)
             return RuntimeStatus(True, executable_override, v, "override", "X-AnyLabeling available.")
         inst = detect_xanylabeling()
@@ -37,7 +37,7 @@ class _XAnyLabelingAdapter:
 
     def launch_project(self, project_dir: Path, options: dict) -> dict:
         exe_override = options.get("executable_override")
-        from plugins.labeling.domain.adapters.xanylabeling_runtime import launch_xanylabeling_project
+        from domain.adapters.xanylabeling_runtime import launch_xanylabeling_project
         if exe_override:
             os.environ["XANYLABELING_EXE"] = exe_override
         try:

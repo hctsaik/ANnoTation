@@ -1,18 +1,20 @@
 from __future__ import annotations
 
+from annotation_runtime import shared_root, app_root
+
 import importlib.util as _ilu
 import json
 import sys
 from pathlib import Path
 
 _HERE = Path(__file__).parent
-_ENGINE_ROOT = _HERE.parents[4]
+_ENGINE_ROOT = app_root()
 
 if str(_ENGINE_ROOT) not in sys.path:
     sys.path.insert(0, str(_ENGINE_ROOT))
 
 _mdb_spec = _ilu.spec_from_file_location(
-    "_manifest_db", _HERE.parents[3] / "scripts" / "shared" / "_manifest_db.py"
+    "_manifest_db", shared_root() / "_manifest_db.py"
 )
 _mdb = _ilu.module_from_spec(_mdb_spec)
 _mdb_spec.loader.exec_module(_mdb)

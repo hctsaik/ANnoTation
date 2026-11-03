@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from annotation_runtime import shared_root, app_root
+
 import importlib.util
 import io
 import json
@@ -11,9 +13,9 @@ from pathlib import Path
 import streamlit as st
 
 _HERE = Path(__file__).parent
-_PROJECT_ROOT = Path(__file__).parents[6]
+_PROJECT_ROOT = app_root()
 
-_help_spec = importlib.util.spec_from_file_location("_help", _HERE.parents[3] / "scripts" / "shared" / "_help.py")
+_help_spec = importlib.util.spec_from_file_location("_help", shared_root() / "_help.py")
 _help = importlib.util.module_from_spec(_help_spec)
 _help_spec.loader.exec_module(_help)
 _PROCESS_FILE = _HERE / "018_process.py"
