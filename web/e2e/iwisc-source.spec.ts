@@ -172,7 +172,14 @@ test("registers an iWISC service, lists tasks, claims one, and opens its local i
   await expect(page.locator("body")).not.toContainText("synthetic-secret");
 
   await page.getByLabel("使用者 ID").fill("worker-e2e");
+  const taskListResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.request().method() === "GET" && url.pathname === "/api/sources/iwisc/tasks";
+  });
   await page.getByRole("button", { name: "查看任務清單" }).click();
+  const taskListResult = await taskListResponse;
+  const taskListBody = await taskListResult.json() as { tasks?: unknown[]; error?: string };
+  expect(taskListResult.status(), JSON.stringify(taskListBody)).toBe(200);
   await expect(page.getByTestId("iwisc-task-ant-e2e-01")).toBeVisible();
   await expect(page.getByTestId("iwisc-task-ant-e2e-done")).toHaveCount(0);
   await page.getByTestId("iwisc-task-ant-e2e-01").click();
