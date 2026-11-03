@@ -15,6 +15,10 @@ const REMOTE_ARCHIVE = Buffer.from(
   "UEsDBBQAAAAIAFMLYl3u178LZgAAAJsAAAASAAAAaW1hZ2VzL3BhbmVsLWEucG5n6wzwc+flkuJiYGDg9fRwCWJgYHBgYGAw4GBiYGDQ03ztwcDAkOHp4hhSMefqOUdBBgWeAxuCvmY4ci8S2Mh+XePEredBaoVC6hSg5+8PXGFmNWSKK/105R4DAwODp6ufyzqnhCYAUEsBAhQAFAAAAAgAUwtiXe7XvwtmAAAAmwAAABIAAAAAAAAAAAAAAIABAAAAAGltYWdlcy9wYW5lbC1hLnBuZ1BLBQYAAAAAAQABAEAAAACWAAAAAAA=",
   "base64",
 );
+const UPDATED_REMOTE_ARCHIVE = Buffer.from(
+  "UEsDBBQAAAAIALUeZF3u178LZgAAAJsAAAASAAAAaW1hZ2VzL3BhbmVsLWIucG5n6wzwc+flkuJiYGDg9fRwCWJgYHBgYGAw4GBiYGDQ03ztwcDAkOHp4hhSMefqOUdBBgWeAxuCvmY4ci8S2Mh+XePEredBaoVC6hSg5+8PXGFmNWSKK/105R4DAwODp6ufyzqnhCYAUEsBAhQAFAAAAAgAtR5kXe7XvwtmAAAAmwAAABIAAAAAAAAAAAAAAIABAAAAAGltYWdlcy9wYW5lbC1iLnBuZ1BLBQYAAAAAAQABAEAAAACWAAAAAAA=",
+  "base64",
+);
 
 let appDataDir = "";
 let temporaryRoot = "";
@@ -99,8 +103,10 @@ async function startRemoteService(): Promise<void> {
       return;
     }
     if (request.method === "GET" && path === "/datasets/remote-1/download") {
-      response.writeHead(200, { "Content-Type": "application/zip", "Content-Length": String(REMOTE_ARCHIVE.length) });
-      response.end(REMOTE_ARCHIVE);
+      const downloadCount = remoteRequests.filter((request) => request === "GET /datasets/remote-1/download").length;
+      const archive = downloadCount === 1 ? REMOTE_ARCHIVE : UPDATED_REMOTE_ARCHIVE;
+      response.writeHead(200, { "Content-Type": "application/zip", "Content-Length": String(archive.length) });
+      response.end(archive);
       return;
     }
     response.writeHead(404, { "Content-Type": "application/json" });
@@ -161,6 +167,25 @@ test("loads a remote Service dataset into the local annotation workspace", async
   await expect(page.getByLabel("第 1 個框選類別")).toBeVisible();
   const savedAfterRestart = JSON.parse(await readFile(sidecarPath, "utf8")) as { shapes: Array<{ shape_type: string }> };
   expect(savedAfterRestart.shapes).toEqual(savedBeforeRestart.shapes);
+
+  // Legacy module 019 reuses the latest local download by default. The same
+  // path must keep its React sidecar instead of silently fetching a fresh ZIP.
+  await page.getByRole("navigation", { name: "工作流程" }).getByRole("button", { name: "資料集" }).click();
+  await page.getByLabel("來源類型").selectOption("remote");
+  await page.getByLabel("Service Base URL").fill(`http://127.0.0.1:${remotePort}`);
+  await page.getByRole("button", { name: "載入資料集清單" }).click();
+  await page.getByRole("button", { name: /下載資料集並開始標注/ }).click();
+  await expect(page.getByRole("button", { name: /panel-a\.png/ })).toBeVisible();
+  await expect(page.getByLabel("第 1 個框選類別")).toBeVisible();
+  expect(remoteRequests.filter((request) => request === "GET /datasets/remote-1/download")).toHaveLength(1);
+
+  // Explicit overwrite re-fetches the remote dataset and opens its new content.
+  await page.getByRole("navigation", { name: "工作流程" }).getByRole("button", { name: "資料集" }).click();
+  await page.getByRole("checkbox", { name: "重新下載（覆蓋現有）" }).check();
+  await page.getByRole("button", { name: /下載資料集並開始標注/ }).click();
+  await expect(page.getByRole("button", { name: /panel-b\.png/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /panel-a\.png/ })).toHaveCount(0);
+  expect(remoteRequests.filter((request) => request === "GET /datasets/remote-1/download")).toHaveLength(2);
 });
 
 test.afterAll(async () => {
