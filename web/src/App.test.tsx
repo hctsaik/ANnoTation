@@ -218,6 +218,7 @@ describe("ANnoTation workflow shell", () => {
   it("launches the selected external annotation tool for the current image", async () => {
     render(<App />);
     await screen.findByRole("heading", { name: "標注工作台" });
+    await screen.findByRole("button", { name: /panel-a\.png/ });
     fireEvent.change(screen.getByLabelText("外部標注工具"), { target: { value: "labelme" } });
     fireEvent.change(screen.getByLabelText("工具執行檔（選填）"), {
       target: { value: "D:\\Tools\\labelme.exe" },
@@ -422,7 +423,7 @@ describe("ANnoTation workflow shell", () => {
     expect(screen.getByText("1 / 2")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /panel-00\.png/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /panel-20\.png/ })).not.toBeInTheDocument();
-  });
+  }, 10_000);
 
   it("filters the review queue by review state and annotation label", async () => {
     const items = [

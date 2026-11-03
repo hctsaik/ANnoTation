@@ -262,6 +262,8 @@ export function AnnotationCanvas({ itemKey, imageUrl, annotation, labels, readOn
             ref={canvasRef}
             aria-label="圖片與標注框"
             className={tool === "draw" ? "annotation-canvas draw-mode" : "annotation-canvas"}
+            width={dimensions.width}
+            height={dimensions.height}
             onPointerDown={pointerDown}
             onPointerMove={pointerMove}
             onPointerUp={pointerUp}

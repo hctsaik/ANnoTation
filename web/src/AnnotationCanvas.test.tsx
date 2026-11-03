@@ -71,6 +71,8 @@ describe("AnnotationCanvas", () => {
     const onChange = setup({ version: "2.4.0", shapes: [polygon] });
     const canvas = await screen.findByLabelText("圖片與標注框") as HTMLCanvasElement;
     canvasBounds(canvas);
+    expect(canvas).toHaveAttribute("width", "100");
+    expect(canvas).toHaveAttribute("height", "80");
 
     fireEvent.pointerDown(canvas, { pointerId: 1, clientX: 10, clientY: 10 });
     fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 50, clientY: 40 });
