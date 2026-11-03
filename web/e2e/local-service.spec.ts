@@ -413,6 +413,7 @@ test("runs real local YOLO CPU pre-labeling through the NativeApp same-origin Re
   await mkdir(sourceDir, { recursive: true });
   const imageName = imagePath.split(/[\\/]/).at(-1) || "inference-image.jpg";
   const imageBytes = await readFile(imagePath);
+  const originalImageHash = createHash("sha256").update(imageBytes).digest("hex");
   await writeFile(join(sourceDir, imageName), imageBytes);
   const modelBytes = await readFile(modelPath);
   const modelHash = createHash("sha256").update(modelBytes).digest("hex");
@@ -465,7 +466,9 @@ test("runs real local YOLO CPU pre-labeling through the NativeApp same-origin Re
   const detectedCount = Number((await completion.textContent())?.match(/、(\d+) 個框/)?.[1] ?? 0);
   expect(detectedCount).toBeGreaterThan(0);
 
-  const sidecar = JSON.parse(await readFile(join(sourceDir, imageName.replace(/\.[^.]+$/, ".json")), "utf8")) as {
+  const sidecarPath = join(sourceDir, imageName.replace(/\.[^.]+$/, ".json"));
+  const savedSidecarBytes = await readFile(sidecarPath);
+  const sidecar = JSON.parse(savedSidecarBytes.toString("utf8")) as {
     imageHeight: number;
     imageWidth: number;
     shapes: Array<{ label: string; score: number; shape_type: string }>;
@@ -476,6 +479,18 @@ test("runs real local YOLO CPU pre-labeling through the NativeApp same-origin Re
   expect(sidecar.shapes.every((shape) => shape.label && shape.score > 0 && shape.shape_type === "rectangle")).toBe(true);
   expect(apiOrigins.length).toBeGreaterThan(0);
   expect(new Set(apiOrigins)).toEqual(new Set([origin]));
+
+  const previousServicePid = serviceProcess?.pid;
+  await stopLocalService();
+  serviceProcess = await startLocalService();
+  expect(serviceProcess.pid).not.toBe(previousServicePid);
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "標注工作台" })).toBeVisible();
+  await expect(page.getByRole("button", { name: new RegExp(imageName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")) })).toBeVisible();
+  await expect(page.locator('.box-list select[aria-label^="第 "]')).toHaveCount(detectedCount);
+  expect(await readFile(sidecarPath)).toEqual(savedSidecarBytes);
+  expect(createHash("sha256").update(await readFile(join(sourceDir, imageName))).digest("hex")).toBe(originalImageHash);
+  expect(await readFile(join(appDataDir, "models", "yolo", `${modelHash}.pt`))).toEqual(modelBytes);
 });
 
 test("renders every supported local image format and honors recursive scanning", async ({ page }) => {
