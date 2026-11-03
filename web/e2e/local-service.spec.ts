@@ -398,7 +398,7 @@ test("imports a local YOLO model through React into app data without exposing it
   expect(await readFile(join(appDataDir, "models", "yolo", `${modelHash}.pt`))).toEqual(modelBytes);
 });
 
-test("runs real local YOLO CPU pre-labeling through React", async ({ page }) => {
+test("runs real local YOLO CPU pre-labeling through the NativeApp same-origin React host", async ({ page }) => {
   const modelPath = process.env.ANNOTATION_E2E_YOLO_MODEL;
   const imagePath = process.env.ANNOTATION_E2E_YOLO_IMAGE;
   test.skip(!modelPath || !imagePath, "Set ANNOTATION_E2E_YOLO_MODEL and ANNOTATION_E2E_YOLO_IMAGE to run real model inference");
@@ -418,13 +418,35 @@ test("runs real local YOLO CPU pre-labeling through React", async ({ page }) => 
   const modelHash = createHash("sha256").update(modelBytes).digest("hex");
   servicePort = await freeLoopbackPort();
   serviceProcess = await startLocalService();
+  const origin = `http://127.0.0.1:${servicePort}`;
+  const apiOrigins: string[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname.startsWith("/api/")) apiOrigins.push(url.origin);
+  });
+  await page.addInitScript((selectedPath: string) => {
+    Object.defineProperty(window, "NATIVEAPP_LOCAL_API", { configurable: true, value: "" });
+    Object.defineProperty(window, "cimHost", {
+      configurable: true,
+      value: {
+        chooseFile: async (options: { properties: string[] }) => {
+          const hostWindow = window as Window & { __nativeAppPickerCalls?: string[][] };
+          (hostWindow.__nativeAppPickerCalls ??= []).push(options.properties);
+          return { canceled: false, paths: [selectedPath] };
+        },
+      },
+    });
+  }, sourceDir);
 
-  await page.goto(`http://127.0.0.1:${servicePort}`);
+  await page.goto(origin);
   await page.getByRole("navigation", { name: "工作流程" }).getByRole("button", { name: "資料集" }).click();
-  await page.getByLabel("資料夾路徑").fill(sourceDir);
+  await page.getByRole("button", { name: "選擇影像資料夾…" }).click();
+  await expect(page.getByLabel("資料夾路徑")).toHaveValue(sourceDir);
   await page.getByLabel("資料集名稱").fill("Real local YOLO inference");
   await page.getByRole("button", { name: /建立資料集並開始標注/ }).click();
   await expect(page.getByRole("heading", { name: "標注工作台" })).toBeVisible();
+  expect(await page.evaluate(() => (window as Window & { __nativeAppPickerCalls?: string[][] }).__nativeAppPickerCalls))
+    .toEqual([["openDirectory"]]);
 
   await page.getByLabel("匯入本機 YOLO 模型").setInputFiles({
     name: modelPath.split(/[\\/]/).at(-1) || "local-model.pt",
@@ -452,6 +474,8 @@ test("runs real local YOLO CPU pre-labeling through React", async ({ page }) => 
   expect(sidecar.imageWidth).toBeGreaterThan(0);
   expect(sidecar.shapes).toHaveLength(detectedCount);
   expect(sidecar.shapes.every((shape) => shape.label && shape.score > 0 && shape.shape_type === "rectangle")).toBe(true);
+  expect(apiOrigins.length).toBeGreaterThan(0);
+  expect(new Set(apiOrigins)).toEqual(new Set([origin]));
 });
 
 test("renders every supported local image format and honors recursive scanning", async ({ page }) => {
