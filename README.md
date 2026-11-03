@@ -9,10 +9,12 @@ runtime.
 **Migration status:** local-folder and remote Service ingestion, synthetic HTTP
 iWISC task listing and claim, the rectangle Canvas workflow, classification,
 review, a COCO export path, and a confirmed label-merge impact preview are
-implemented. The iWISC path saves React sidecars into the local task record and
-supports local task completion. A connection can opt into JSON result delivery by
-configuring its relative API path and method; without a path, external delivery
-remains unsupported. The local workflow has a synthetic real-service browser
+implemented. The remote Service browser journey now lists and downloads a
+synthetic dataset, saves a local annotation, and reads it back after restarting
+the local service. The iWISC path saves React sidecars into the local task record
+and supports local task completion. A connection can opt into JSON result
+delivery by configuring its relative API path and method; without a path,
+external delivery remains unsupported. The local workflow has a synthetic real-service browser
 journey, and iWISC has a separate browser-to-service journey against a local HTTP
 fixture. This branch is not release-complete:
 see the
@@ -143,7 +145,10 @@ successful export records. The API is not mocked for this case, and the source
 image hash is checked for changes. A second browser journey registers a synthetic iWISC
 HTTP service, lists and claims a task, downloads its ZIP, opens the image, saves
 annotation sidecars, delivers the configured JSON result, and verifies the
-read-only editor. Python tests also verify the unconfigured unsupported state.
+read-only editor. A third browser journey lists and downloads a dataset from a
+synthetic remote Service, annotates the downloaded image, and verifies the
+annotation after restarting the local service. Python tests also verify the
+unconfigured unsupported state.
 Build `web/dist` before running the
 suite. On Windows the tests start the
 service with `py -3.14`; set `ANNOTATION_PYTHON` to another executable when needed.
