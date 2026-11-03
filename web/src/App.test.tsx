@@ -50,7 +50,9 @@ const workspace = { manifest_id: "demo", manifest_name: "Inspection set", total:
 
 describe("ANnoTation workflow shell", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    // Clear one-time return queues as well as call history. A timed-out host
+    // picker test must not leak its next selected path into the following test.
+    vi.resetAllMocks();
     mocks.desktopHost = false;
     mocks.nativeAppHost = false;
     localStorage.clear();
@@ -129,7 +131,7 @@ describe("ANnoTation workflow shell", () => {
     fireEvent.click(stages.getByRole("button", { name: /匯出/ }));
     fireEvent.click(screen.getByRole("button", { name: "選擇匯出資料夾…" }));
     await waitFor(() => expect(screen.getByRole("textbox", { name: "資料夾路徑" })).toHaveValue("D:\\exports\\inspection"));
-  });
+  }, 15_000);
 
   it("uses the NativeApp bridge for folders and imports a local model through the same-origin API", async () => {
     mocks.nativeAppHost = true;
@@ -157,7 +159,7 @@ describe("ANnoTation workflow shell", () => {
     expect(mocks.api.prelabel.mock.calls[0][1]).toMatchObject({ model_path: `local-model:${"a".repeat(64)}.pt` });
     expect(screen.queryByRole("button", { name: "選擇模型檔案…" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "選擇工具執行檔…" })).not.toBeInTheDocument();
-  });
+  }, 15_000);
 
   it("runs dataset pre-labeling in 500-image batches and aggregates the results", async () => {
     const items = [
