@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { createHash } from "node:crypto";
 import { spawn, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
-import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -906,6 +906,9 @@ test("exports stratified 60/20/20 splits by classification through React", async
   await page.getByLabel("我已完成必要抽查與異常處理").check();
   await workflow.getByRole("button", { name: "匯出" }).click();
   await page.getByLabel("允許部分匯出").check();
+  for (const format of ["YOLO txt", "Pascal VOC", "ImageFolder", "CSV"]) {
+    await page.getByText(format, { exact: true }).click();
+  }
   await page.getByText("啟用 Train / Val / Test 分割", { exact: true }).click();
   const splitInputs = page.locator(".split-fields input[type=number]");
   await splitInputs.nth(0).fill("60");
@@ -930,11 +933,57 @@ test("exports stratified 60/20/20 splits by classification through React", async
     images.filter((image) => image.file_name.startsWith("class-b-")).length,
   ]);
   expect(classCounts).toEqual([[7, 7], [2, 2], [3, 3]]);
-  expect(splits.flatMap(({ images }) => images.map((image) => image.file_name)).sort()).toEqual(
-    Array.from({ length: 12 }, (_, index) => `class-a-${String(index).padStart(2, "0")}.png`)
-      .concat(Array.from({ length: 12 }, (_, index) => `class-b-${String(index).padStart(2, "0")}.png`))
-      .sort(),
-  );
+  const expectedFilenames = Array.from({ length: 12 }, (_, index) => `class-a-${String(index).padStart(2, "0")}.png`)
+    .concat(Array.from({ length: 12 }, (_, index) => `class-b-${String(index).padStart(2, "0")}.png`))
+    .sort();
+  const assertClassCounts = (names: string[], expected: [number, number]) => {
+    expect(names.filter((name) => name.startsWith("class-a-")).length).toBe(expected[0]);
+    expect(names.filter((name) => name.startsWith("class-b-")).length).toBe(expected[1]);
+  };
+  expect(splits.flatMap(({ images }) => images.map((image) => image.file_name)).sort()).toEqual(expectedFilenames);
+
+  const yoloSplitNames = await Promise.all(["train", "val", "test"].map(async (splitName) =>
+    readdir(join(exportDir, "yolo_txt", "images", splitName))));
+  expect(yoloSplitNames.map((names) => names.length)).toEqual([14, 4, 6]);
+  yoloSplitNames.forEach((names, index) => assertClassCounts(names, classCounts[index] as [number, number]));
+  expect(yoloSplitNames.flat().sort()).toEqual(expectedFilenames);
+
+  const vocSplitNames = await Promise.all(["train", "val", "test"].map(async (splitName) =>
+    (await readFile(join(exportDir, "pascal_voc", "ImageSets", "Main", `${splitName}.txt`), "utf8"))
+      .split(/\r?\n/).filter(Boolean).map((stem) => `${stem}.png`)));
+  expect(vocSplitNames.map((names) => names.length)).toEqual([14, 4, 6]);
+  vocSplitNames.forEach((names, index) => assertClassCounts(names, classCounts[index] as [number, number]));
+  expect(vocSplitNames.flat().sort()).toEqual(expectedFilenames);
+
+  const imagefolderSplitNames: string[][] = [];
+  for (const [index, splitName] of ["train", "val", "test"].entries()) {
+    const splitCounts = classCounts[index] as [number, number];
+    const namesByClass = await Promise.all(["class-a", "class-b"].map((className) =>
+      readdir(join(exportDir, "imagefolder", splitName, className))));
+    for (const [classIndex, className] of ["class-a", "class-b"].entries()) {
+      const names = namesByClass[classIndex];
+      expect(names).toHaveLength(splitCounts[classIndex]);
+      expect(names.every((name) => name.startsWith(`${className}-`))).toBe(true);
+    }
+    imagefolderSplitNames.push(namesByClass.flat());
+  }
+  expect(imagefolderSplitNames.flat().sort()).toEqual(expectedFilenames);
+
+  const csvLines = (await readFile(join(exportDir, "csv", "annotations.csv"), "utf8"))
+    .trim().split(/\r?\n/);
+  const csvHeaders = csvLines[0].split(",");
+  const csvRows = csvLines.slice(1).map((line) => line.split(","));
+  const splitColumn = csvHeaders.indexOf("split");
+  const classificationColumn = csvHeaders.indexOf("classification");
+  const filePathColumn = csvHeaders.indexOf("file_path");
+  expect(csvRows).toHaveLength(24);
+  expect([splitColumn, classificationColumn, filePathColumn].every((column) => column >= 0)).toBe(true);
+  const csvSplitNames = ["train", "val", "test"].map((splitName) => csvRows
+    .filter((row) => row[splitColumn] === splitName)
+    .map((row) => row[filePathColumn].split(/[\\/]/).pop() ?? ""));
+  expect(csvSplitNames.map((names) => names.length)).toEqual([14, 4, 6]);
+  csvSplitNames.forEach((names, index) => assertClassCounts(names, classCounts[index] as [number, number]));
+  expect(csvSplitNames.flat().sort()).toEqual(expectedFilenames);
 });
 
 test.afterAll(async () => {
