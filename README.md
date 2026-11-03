@@ -133,9 +133,9 @@ preserves existing polygon sidecars during a React rectangle edit, applies and
 clears image classification across image navigation, saves review
 data including approval and rejection with comments, saves and restores the
 configured external tool, and checks COCO, YOLO, Pascal VOC, ImageFolder, and CSV
-exports with a 100/0/0 split. A second 50/50/0 export checks that the real COCO
-output assigns one image to train, one to val, and none to test. After restarting
-the service, it reads the annotation, cleared classification,
+exports with a 100/0/0 split. COCO exports also check 50/50/0, validation-only
+0/100/0, and test-only 0/0/100; each split output assigns every source image
+exactly once. After restarting the service, it reads the annotation, cleared classification,
 external tool, review decisions and comments back, and verifies that the recent
 export history contains all five formats. It also confirms an invalid Windows
 output path is reported as a failed attempt without replacing the previous

@@ -261,6 +261,38 @@ test("runs a real local dataset through annotation, review, export, and restart"
   expect(splitCoco.flatMap(({ data }) => data.images.map((image) => image.file_name)).sort())
     .toEqual(["panel-a.png", "panel-b.png"]);
 
+  for (const boundaryCase of [
+    { name: "validation-only", ratios: [0, 100, 0], expectedCounts: [0, 2, 0] },
+    { name: "test-only", ratios: [0, 0, 100], expectedCounts: [0, 0, 2] },
+  ]) {
+    const boundaryExportDir = join(temporaryRoot, `exports ${boundaryCase.name}`);
+    for (const [index, ratio] of boundaryCase.ratios.entries()) {
+      await splitInputs.nth(index).fill(String(ratio));
+    }
+    await page.getByLabel("資料夾路徑").fill(boundaryExportDir);
+    const boundaryExportResponse = page.waitForResponse((response) =>
+      response.request().method() === "POST"
+      && new URL(response.url()).pathname.endsWith("/exports"),
+    );
+    await page.getByRole("button", { name: /檢查並開始匯出/ }).click();
+    const boundaryExportResult = await boundaryExportResponse;
+    expect(boundaryExportResult.status()).toBe(200);
+    expect((await boundaryExportResult.json()).mode).toBe("done");
+    const boundaryCoco = await Promise.all(["train", "val", "test"].map(async (splitName) => ({
+      splitName,
+      data: JSON.parse(await readFile(join(boundaryExportDir, "coco_json", `${splitName}.json`), "utf8")) as {
+        images: Array<{ file_name: string }>;
+      },
+    })));
+    expect(boundaryCoco.map(({ splitName, data }) => [splitName, data.images.length])).toEqual([
+      ["train", boundaryCase.expectedCounts[0]],
+      ["val", boundaryCase.expectedCounts[1]],
+      ["test", boundaryCase.expectedCounts[2]],
+    ]);
+    expect(boundaryCoco.flatMap(({ data }) => data.images.map((image) => image.file_name)).sort())
+      .toEqual(["panel-a.png", "panel-b.png"]);
+  }
+
   await page.getByLabel("資料夾路徑").fill(join(temporaryRoot, "invalid|destination"));
   await page.getByRole("button", { name: /檢查並開始匯出/ }).click();
   await expect(page.getByRole("heading", { name: "匯出檢查結果" })).toBeVisible();
