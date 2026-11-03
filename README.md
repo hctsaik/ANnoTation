@@ -133,12 +133,14 @@ preserves existing polygon sidecars during a React rectangle edit, applies and
 clears image classification across image navigation, saves review
 data including approval and rejection with comments, saves and restores the
 configured external tool, and checks COCO, YOLO, Pascal VOC, ImageFolder, and CSV
-exports with a 100/0/0 split. After restarting the service, it reads the
-annotation, cleared classification, external tool, review decisions and
-comments, and all five export-history records back. It also confirms an invalid
-Windows output path is reported as a failed attempt without replacing that
-history. The API is not mocked for this case, and the source image hash is
-checked for changes. A second browser journey registers a synthetic iWISC
+exports with a 100/0/0 split. A second 50/50/0 export checks that the real COCO
+output assigns one image to train, one to val, and none to test. After restarting
+the service, it reads the annotation, cleared classification,
+external tool, review decisions and comments back, and verifies that the recent
+export history contains all five formats. It also confirms an invalid Windows
+output path is reported as a failed attempt without replacing the previous
+successful export records. The API is not mocked for this case, and the source
+image hash is checked for changes. A second browser journey registers a synthetic iWISC
 HTTP service, lists and claims a task, downloads its ZIP, opens the image, saves
 annotation sidecars, delivers the configured JSON result, and verifies the
 read-only editor. Python tests also verify the unconfigured unsupported state.

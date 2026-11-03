@@ -234,6 +234,33 @@ test("runs a real local dataset through annotation, review, export, and restart"
   const csvExport = await readFile(join(exportDir, "csv", "annotations.csv"), "utf8");
   expect(csvExport).toContain(",train,OK,scratch,rectangle,");
 
+  const splitExportDir = join(temporaryRoot, "exports train-val split");
+  await page.getByLabel("依分類分層").uncheck();
+  await splitInputs.nth(0).fill("50");
+  await splitInputs.nth(1).fill("50");
+  await splitInputs.nth(2).fill("0");
+  await page.getByLabel("資料夾路徑").fill(splitExportDir);
+  const splitExportResponse = page.waitForResponse((response) =>
+    response.request().method() === "POST"
+    && new URL(response.url()).pathname.endsWith("/exports"),
+  );
+  await page.getByRole("button", { name: /檢查並開始匯出/ }).click();
+  const splitExportResult = await splitExportResponse;
+  expect(splitExportResult.status()).toBe(200);
+  expect((await splitExportResult.json()).mode).toBe("done");
+  await expect(page.getByRole("heading", { name: "匯出完成" })).toBeVisible();
+  const splitCoco = await Promise.all(["train", "val", "test"].map(async (splitName) => ({
+    splitName,
+    data: JSON.parse(await readFile(join(splitExportDir, "coco_json", `${splitName}.json`), "utf8")) as {
+      images: Array<{ file_name: string }>;
+    },
+  })));
+  expect(splitCoco.map(({ splitName, data }) => [splitName, data.images.length])).toEqual([
+    ["train", 1], ["val", 1], ["test", 0],
+  ]);
+  expect(splitCoco.flatMap(({ data }) => data.images.map((image) => image.file_name)).sort())
+    .toEqual(["panel-a.png", "panel-b.png"]);
+
   await page.getByLabel("資料夾路徑").fill(join(temporaryRoot, "invalid|destination"));
   await page.getByRole("button", { name: /檢查並開始匯出/ }).click();
   await expect(page.getByRole("heading", { name: "匯出檢查結果" })).toBeVisible();
@@ -276,9 +303,11 @@ test("runs a real local dataset through annotation, review, export, and restart"
   await expect(page.getByLabel("審核備註")).toHaveValue("需補標後重送");
   await page.getByRole("button", { name: "清除", exact: true }).click();
   await workflow.getByRole("button", { name: "匯出" }).click();
-  for (const format of ["coco_json", "yolo_txt", "pascal_voc", "imagefolder", "csv"]) {
-    await expect(page.getByText(format, { exact: true })).toBeVisible();
-  }
+  const recentExports = page.locator(".export-aside .history-row");
+  await expect(recentExports).toHaveCount(5);
+  expect(new Set(await recentExports.locator("strong").allTextContents())).toEqual(
+    new Set(["coco_json", "yolo_txt", "pascal_voc", "imagefolder", "csv"]),
+  );
   expect(createHash("sha256").update(await readFile(join(sourceDir, "panel-a.png"))).digest("hex")).toBe(originalImageHash);
 
   await workflow.getByRole("button", { name: "標注工作台" }).click();
