@@ -850,6 +850,93 @@ test("opens a local dataset through the NativeApp same-origin folder bridge", as
   expect(new Set(apiRequests.map((url) => new URL(url).origin))).toEqual(new Set([origin]));
 });
 
+test("exports stratified 60/20/20 splits by classification through React", async ({ page }) => {
+  test.setTimeout(60_000);
+  await stopLocalService();
+  temporaryRoot = await mkdtemp(join(tmpdir(), "annotation-stratified-export-e2e-"));
+  temporaryRoots.push(temporaryRoot);
+  appDataDir = join(temporaryRoot, "app data");
+  sourceDir = join(temporaryRoot, "分類資料集");
+  exportDir = join(temporaryRoot, "stratified exports");
+  await mkdir(sourceDir, { recursive: true });
+  for (const category of ["class-a", "class-b"]) {
+    for (let index = 0; index < 12; index += 1) {
+      await writeFile(join(sourceDir, `${category}-${String(index).padStart(2, "0")}.png`), PNG_FIXTURE);
+    }
+  }
+
+  servicePort = await freeLoopbackPort();
+  serviceProcess = await startLocalService();
+  const origin = `http://127.0.0.1:${servicePort}`;
+  await page.goto(origin);
+  const workflow = page.getByRole("navigation", { name: "工作流程" });
+  await workflow.getByRole("button", { name: /資料集/ }).click();
+  await page.getByLabel("資料夾路徑").fill(sourceDir);
+  await page.getByLabel("資料集名稱").fill("Stratified export verification");
+  await page.getByRole("button", { name: /建立資料集並開始標注/ }).click();
+  await expect(page.getByRole("heading", { name: "標注工作台" })).toBeVisible();
+
+  const seededItemCount = await page.evaluate(async () => {
+    const sessionResponse = await fetch("/api/session");
+    if (!sessionResponse.ok) throw new Error("Could not get the local API session token");
+    const { token } = await sessionResponse.json();
+    const headers = { "Content-Type": "application/json", "X-Annotation-Token": token };
+    const manifestResponse = await fetch("/api/manifests", { headers });
+    if (!manifestResponse.ok) throw new Error("Could not list local manifests");
+    const { manifests } = await manifestResponse.json();
+    const manifestId = manifests[0]?.manifest_id;
+    if (!manifestId) throw new Error("The created local manifest was not found");
+    const itemsResponse = await fetch(`/api/manifests/${encodeURIComponent(manifestId)}/items?view=workspace`, { headers });
+    if (!itemsResponse.ok) throw new Error("Could not list local manifest items");
+    const { items } = await itemsResponse.json();
+    if (items.length !== 24) throw new Error(`Expected 24 local images, found ${items.length}`);
+    for (const item of items) {
+      const label = item.name.startsWith("class-a-") ? "class-a" : "class-b";
+      const response = await fetch(
+        `/api/manifests/${encodeURIComponent(manifestId)}/items/${encodeURIComponent(item.item_id)}/classification`,
+        { method: "PUT", headers, body: JSON.stringify({ label }) },
+      );
+      if (!response.ok) throw new Error(`Could not classify ${item.name}`);
+    }
+    return items.length;
+  });
+  expect(seededItemCount).toBe(24);
+
+  await workflow.getByRole("button", { name: "審核" }).click();
+  await page.getByLabel("我已完成必要抽查與異常處理").check();
+  await workflow.getByRole("button", { name: "匯出" }).click();
+  await page.getByLabel("允許部分匯出").check();
+  await page.getByText("啟用 Train / Val / Test 分割", { exact: true }).click();
+  const splitInputs = page.locator(".split-fields input[type=number]");
+  await splitInputs.nth(0).fill("60");
+  await splitInputs.nth(1).fill("20");
+  await splitInputs.nth(2).fill("20");
+  await expect(page.getByLabel("依分類分層")).toBeChecked();
+  await page.getByLabel("資料夾路徑").fill(exportDir);
+  await page.getByRole("button", { name: /檢查並開始匯出/ }).click();
+  await expect(page.getByRole("heading", { name: "匯出完成" })).toBeVisible();
+
+  const splits = await Promise.all(["train", "val", "test"].map(async (splitName) => ({
+    splitName,
+    images: (JSON.parse(await readFile(join(exportDir, "coco_json", `${splitName}.json`), "utf8")) as {
+      images: Array<{ file_name: string }>;
+    }).images,
+  })));
+  expect(splits.map(({ splitName, images }) => [splitName, images.length])).toEqual([
+    ["train", 14], ["val", 4], ["test", 6],
+  ]);
+  const classCounts = splits.map(({ images }) => [
+    images.filter((image) => image.file_name.startsWith("class-a-")).length,
+    images.filter((image) => image.file_name.startsWith("class-b-")).length,
+  ]);
+  expect(classCounts).toEqual([[7, 7], [2, 2], [3, 3]]);
+  expect(splits.flatMap(({ images }) => images.map((image) => image.file_name)).sort()).toEqual(
+    Array.from({ length: 12 }, (_, index) => `class-a-${String(index).padStart(2, "0")}.png`)
+      .concat(Array.from({ length: 12 }, (_, index) => `class-b-${String(index).padStart(2, "0")}.png`))
+      .sort(),
+  );
+});
+
 test.afterAll(async () => {
   await stopLocalService();
   for (const root of temporaryRoots) await rm(root, { recursive: true, force: true });
