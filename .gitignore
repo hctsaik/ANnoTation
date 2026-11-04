@@ -23,6 +23,7 @@ web/src-tauri/target/
 web/src-tauri/gen/schemas/
 dist/annotation-web/
 .venv-web-package/
+.venv-web-dev/
 
 # Local runtime logs and data
 tmp/

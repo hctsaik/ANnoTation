@@ -45,6 +45,8 @@ are stored in `~/.annotation-standalone`.
 
 Use a Node release supported by Vitest 5: Node 22.12.x, 24.x, or 26+.
 
+### Windows browser development
+
 Run the Python service on port 4173 in one terminal, then start Vite in another:
 
 ```powershell
@@ -52,9 +54,57 @@ Set-Location web
 npm run dev
 ```
 
+### macOS source development
+
+The React app and loopback Python service can be developed from a macOS checkout
+in a browser. Use Python 3.11 and a Node release supported by Vitest 5 (22.12.x,
+24.x, or 26+):
+
+```bash
+python3.11 -m venv .venv-web-dev
+source .venv-web-dev/bin/activate
+python -m pip install -r requirements-web-test.txt
+npm --prefix web ci
+npm --prefix web run build
+```
+
+Start the service from the repository root in one terminal:
+
+```bash
+python -m annotation_web.server --host 127.0.0.1 --port 4173
+```
+
+Start the browser UI in another terminal:
+
+```bash
+npm --prefix web run dev
+```
+
+For local verification, run the focused Python tests and React checks used by
+this project, then run Playwright with Chromium:
+
+```bash
+python -m pytest tests/test_annotation_web_service.py tests/annotation/test_configurable_rest_delivery.py -q
+npm --prefix web test
+npm --prefix web run build
+cd web
+npx playwright install chromium
+npm run e2e
+```
+
+The repository-wide default pytest collection still encounters two legacy
+module tests that import a Windows-only sibling path; the focused commands above
+avoid those unrelated legacy modules. These steps cover source development in a
+browser only. The NSIS package below is Windows-specific, and macOS packaging or
+NativeApp host integration has not been verified.
+
 Vite proxies API requests to the local Python service. Browser mode accepts paths
-as text. The Tauri development host exposes native folder and file pickers and
-starts the loopback Python service. In a NativeApp public web host, React uses
+as text.
+
+### Windows Tauri and NativeApp development
+
+The Tauri development host exposes native folder and file pickers and starts the
+loopback Python service. In a NativeApp public web host, React uses
 same-origin `/api` requests and `cimHost.chooseFile` for local dataset and export
 folders. A browser file input uploads YOLO models through that same-origin API;
 native model and external-tool executable pickers remain Tauri-only. Browser
