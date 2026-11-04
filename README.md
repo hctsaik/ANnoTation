@@ -8,8 +8,8 @@ runtime.
 
 **Migration status:** local-folder and remote Service ingestion, synthetic HTTP
 iWISC task listing and claim, the rectangle Canvas workflow with eight-handle
-and symmetric resize, keyboard fine adjustment, zoom and pan, classification,
-review, a COCO
+and symmetric resize, keyboard fine adjustment, zoom and pan with viewport-resize
+retention, classification, review, a COCO
 export path, and a confirmed label-merge impact preview are implemented. The
 remote Service browser journey now lists and downloads a synthetic dataset,
 saves a local annotation, and reads it back after restarting the local service.

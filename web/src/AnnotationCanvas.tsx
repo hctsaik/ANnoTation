@@ -110,21 +110,40 @@ export function AnnotationCanvas({ itemKey, imageUrl, annotation, labels, readOn
   useEffect(() => {
     const frame = frameRef.current;
     if (!frame || !dimensions.width || !dimensions.height) return;
+    let reflowFrame = 0;
     const updateFit = () => {
+      const previousMaxX = Math.max(0, frame.scrollWidth - frame.clientWidth);
+      const previousMaxY = Math.max(0, frame.scrollHeight - frame.clientHeight);
+      const scrollRatioX = previousMaxX > 0 ? frame.scrollLeft / previousMaxX : 0.5;
+      const scrollRatioY = previousMaxY > 0 ? frame.scrollTop / previousMaxY : 0.5;
       const frameBounds = frame.getBoundingClientRect();
       const availableWidth = Math.max(1, frameBounds.width - 24);
       const availableHeight = Math.max(1, frameBounds.height - 24);
       const scale = Math.min(1, availableWidth / dimensions.width, availableHeight / dimensions.height);
       setFitSize({ width: dimensions.width * scale, height: dimensions.height * scale });
+      if (reflowFrame) cancelAnimationFrame(reflowFrame);
+      reflowFrame = requestAnimationFrame(() => {
+        const nextMaxX = Math.max(0, frame.scrollWidth - frame.clientWidth);
+        const nextMaxY = Math.max(0, frame.scrollHeight - frame.clientHeight);
+        frame.scrollLeft = nextMaxX * scrollRatioX;
+        frame.scrollTop = nextMaxY * scrollRatioY;
+        reflowFrame = 0;
+      });
     };
     updateFit();
     if (typeof ResizeObserver === "undefined") {
       window.addEventListener("resize", updateFit);
-      return () => window.removeEventListener("resize", updateFit);
+      return () => {
+        window.removeEventListener("resize", updateFit);
+        if (reflowFrame) cancelAnimationFrame(reflowFrame);
+      };
     }
     const observer = new ResizeObserver(updateFit);
     observer.observe(frame);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (reflowFrame) cancelAnimationFrame(reflowFrame);
+    };
   }, [dimensions]);
 
   useEffect(() => {
