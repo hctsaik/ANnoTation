@@ -1025,6 +1025,197 @@ test("exports stratified 60/20/20 splits by classification through React", async
   expect(csvSplitNames.flat().sort()).toEqual(expectedFilenames);
 });
 
+test("covers rectangle handles, symmetric resize, keyboard editing, zoom, pan, and viewport reflow", async ({ page }) => {
+  test.setTimeout(60_000);
+  temporaryRoot = await mkdtemp(join(tmpdir(), "annotation-canvas-interactions-e2e-"));
+  temporaryRoots.push(temporaryRoot);
+  appDataDir = join(temporaryRoot, "app data");
+  sourceDir = join(temporaryRoot, "資料集");
+  await mkdir(sourceDir, { recursive: true });
+  await writeFile(join(sourceDir, "panel-a.png"), PNG_FIXTURE);
+  servicePort = await freeLoopbackPort();
+  serviceProcess = await startLocalService();
+
+  await page.goto(`http://127.0.0.1:${servicePort}`);
+  const workflow = page.getByRole("navigation", { name: "工作流程" });
+  await workflow.getByRole("button", { name: /資料集/ }).click();
+  await page.getByLabel("資料夾路徑").fill(sourceDir);
+  await page.getByLabel("資料集名稱").fill("Canvas interaction coverage");
+  await page.getByRole("button", { name: /建立資料集並開始標注/ }).click();
+  await expect(page.getByRole("heading", { name: "標注工作台" })).toBeVisible();
+  await page.getByRole("button", { name: /panel-a\.png/ }).click();
+
+  const canvas = page.getByLabel("圖片與標注框");
+  const frame = page.locator(".canvas-frame");
+  const sidecarPath = join(sourceDir, "panel-a.json");
+  await expect(canvas).toBeVisible();
+
+  type PersistedBox = { left: number; top: number; right: number; bottom: number };
+  async function readPersistedBox(): Promise<PersistedBox> {
+    const sidecar = JSON.parse(await readFile(sidecarPath, "utf8")) as {
+      shapes: Array<{ shape_type: string; points: number[][] }>;
+    };
+    const rectangle = sidecar.shapes.find((shape) => shape.shape_type === "rectangle");
+    if (!rectangle || rectangle.points.length < 2) throw new Error("The saved rectangle is missing from the sidecar.");
+    const [first, second] = rectangle.points;
+    if (!first || !second) throw new Error("The saved rectangle has incomplete points.");
+    return {
+      left: Math.min(first[0] ?? 0, second[0] ?? 0),
+      top: Math.min(first[1] ?? 0, second[1] ?? 0),
+      right: Math.max(first[0] ?? 0, second[0] ?? 0),
+      bottom: Math.max(first[1] ?? 0, second[1] ?? 0),
+    };
+  }
+
+  async function screenPoint(x: number, y: number) {
+    const bounds = await canvas.boundingBox();
+    if (!bounds) throw new Error("The annotation canvas has no visible bounds.");
+    const size = await canvas.evaluate((element: HTMLCanvasElement) => ({ width: element.width, height: element.height }));
+    return { x: bounds.x + x / size.width * bounds.width, y: bounds.y + y / size.height * bounds.height };
+  }
+
+  async function dragImagePoint(x: number, y: number, dx: number, dy: number, symmetric = false) {
+    const start = await screenPoint(x, y);
+    const end = await screenPoint(x + dx, y + dy);
+    if (symmetric) await page.keyboard.down("Alt");
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await page.mouse.move(end.x, end.y, { steps: 4 });
+    await page.mouse.up();
+    if (symmetric) await page.keyboard.up("Alt");
+  }
+
+  async function saveAndReadBox(): Promise<PersistedBox> {
+    await page.getByRole("button", { name: /保存標注/ }).click();
+    await expect(page.locator(".save-state")).toHaveText("已同步");
+    await expect(page.getByRole("button", { name: /重新掃描/ })).toBeEnabled();
+    return readPersistedBox();
+  }
+
+  await dragImagePoint(12, 9, 34, 27);
+  let current = await saveAndReadBox();
+  const handleCases = [
+    { name: "nw", dx: -2, dy: -2 },
+    { name: "n", dx: 0, dy: -2 },
+    { name: "ne", dx: 2, dy: -2 },
+    { name: "e", dx: 2, dy: 0 },
+    { name: "se", dx: 2, dy: 2 },
+    { name: "s", dx: 0, dy: 2 },
+    { name: "sw", dx: -2, dy: 2 },
+    { name: "w", dx: -2, dy: 0 },
+  ];
+  for (const handle of handleCases) {
+    const middleX = (current.left + current.right) / 2;
+    const middleY = (current.top + current.bottom) / 2;
+    const positions: Record<string, [number, number]> = {
+      nw: [current.left, current.top], n: [middleX, current.top], ne: [current.right, current.top],
+      e: [current.right, middleY], se: [current.right, current.bottom], s: [middleX, current.bottom],
+      sw: [current.left, current.bottom], w: [current.left, middleY],
+    };
+    const [x, y] = positions[handle.name] ?? [middleX, middleY];
+    await page.locator(".box-select").first().click();
+    await dragImagePoint(x, y, handle.dx, handle.dy);
+    const previous = current;
+    current = await saveAndReadBox();
+    if (handle.name.includes("w")) expect(current.left, `${handle.name} should move the left edge outward`).toBeLessThan(previous.left);
+    if (handle.name.includes("e")) expect(current.right, `${handle.name} should move the right edge outward`).toBeGreaterThan(previous.right);
+    if (handle.name.includes("n")) expect(current.top, `${handle.name} should move the top edge outward`).toBeLessThan(previous.top);
+    if (handle.name.includes("s")) expect(current.bottom, `${handle.name} should move the bottom edge outward`).toBeGreaterThan(previous.bottom);
+  }
+
+  await page.locator(".box-select").first().click();
+  const symmetricBefore = current;
+  await dragImagePoint((current.left + current.right) / 2 + (current.right - current.left) / 2,
+    (current.top + current.bottom) / 2 + (current.bottom - current.top) / 2, 2, 2, true);
+  current = await saveAndReadBox();
+  expect((current.left + current.right) / 2).toBeCloseTo((symmetricBefore.left + symmetricBefore.right) / 2, 1);
+  expect((current.top + current.bottom) / 2).toBeCloseTo((symmetricBefore.top + symmetricBefore.bottom) / 2, 1);
+  expect(current.right - current.left).toBeGreaterThan(symmetricBefore.right - symmetricBefore.left);
+  expect(current.bottom - current.top).toBeGreaterThan(symmetricBefore.bottom - symmetricBefore.top);
+
+  await frame.focus();
+  const beforeMove = current;
+  await page.keyboard.press("ArrowRight");
+  current = await saveAndReadBox();
+  expect(current.left).toBeCloseTo(beforeMove.left + 1, 1);
+  expect(current.right).toBeCloseTo(beforeMove.right + 1, 1);
+
+  await frame.focus();
+  const beforeKeyboardResize = current;
+  await page.keyboard.press("Alt+ArrowRight");
+  await expect(page.getByRole("button", { name: /保存標注/ })).toBeEnabled();
+  current = await saveAndReadBox();
+  expect(current.left).toBeCloseTo(beforeKeyboardResize.left, 1);
+  expect(current.right).toBeCloseTo(beforeKeyboardResize.right + 1, 1);
+
+  const zoomControls = page.getByRole("group", { name: "影像縮放與平移" });
+  const zoomLabel = zoomControls.locator('[aria-live="polite"]');
+  await expect(zoomLabel).toHaveText("100%");
+  await zoomControls.getByRole("button", { name: "放大影像" }).click();
+  await expect(zoomLabel).toHaveText("110%");
+  const frameBounds = await frame.boundingBox();
+  if (!frameBounds) throw new Error("The annotation frame has no visible bounds.");
+  await page.mouse.move(frameBounds.x + frameBounds.width / 2, frameBounds.y + frameBounds.height / 2);
+  await page.mouse.wheel(0, -100);
+  await expect(zoomLabel).toHaveText("121%");
+  await canvas.focus();
+  await page.keyboard.press("-");
+  await expect(zoomLabel).toHaveText("109%");
+  await page.keyboard.press("f");
+  await expect(zoomLabel).toHaveText("100%");
+
+  const zoomIn = zoomControls.getByRole("button", { name: "放大影像" });
+  for (let index = 0; index < 24; index += 1) await zoomIn.click();
+  await expect(zoomLabel).toHaveText("800%");
+  await page.setViewportSize({ width: 430, height: 900 });
+  await expect.poll(async () => frame.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+
+  await canvas.evaluate((element: HTMLCanvasElement) => element.focus({ preventScroll: true }));
+  const beforePan = await frame.evaluate((element) => ({
+    left: element.scrollLeft,
+    max: Math.max(0, element.scrollWidth - element.clientWidth),
+  }));
+  expect(beforePan.max).toBeGreaterThan(0);
+  const frameRect = await frame.boundingBox();
+  const canvasRect = await canvas.boundingBox();
+  if (!frameRect || !canvasRect) throw new Error("The zoomed canvas is not visible for panning.");
+  const visibleLeft = Math.max(frameRect.x, canvasRect.x);
+  const visibleRight = Math.min(frameRect.x + frameRect.width, canvasRect.x + canvasRect.width);
+  const visibleTop = Math.max(frameRect.y, canvasRect.y);
+  const visibleBottom = Math.min(frameRect.y + frameRect.height, canvasRect.y + canvasRect.height);
+  if (visibleRight <= visibleLeft || visibleBottom <= visibleTop) throw new Error("The zoomed canvas has no visible pan area.");
+  const panX = (visibleLeft + visibleRight) / 2;
+  const panY = (visibleTop + visibleBottom) / 2;
+  const panDelta = beforePan.left < beforePan.max / 2 ? -24 : 24;
+  await canvas.focus();
+  await page.keyboard.down("Space");
+  await page.mouse.move(panX, panY);
+  await page.mouse.down();
+  await page.mouse.move(panX + panDelta, panY, { steps: 4 });
+  await page.mouse.up();
+  await page.keyboard.up("Space");
+  const afterPan = await frame.evaluate((element) => ({
+    left: element.scrollLeft,
+    max: Math.max(0, element.scrollWidth - element.clientWidth),
+  }));
+  expect(Math.abs(afterPan.left - beforePan.left)).toBeGreaterThan(10);
+
+  const ratioBeforeResize = afterPan.left / afterPan.max;
+  const frameWidthBeforeResize = await frame.evaluate((element) => element.clientWidth);
+  await page.setViewportSize({ width: 500, height: 900 });
+  await expect.poll(async () => frame.evaluate((element) => element.clientWidth)).toBeGreaterThan(frameWidthBeforeResize);
+  await expect.poll(async () => frame.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+  await expect.poll(async () => frame.evaluate(
+    (element, ratio) => Math.abs(element.scrollLeft / Math.max(1, element.scrollWidth - element.clientWidth) - ratio),
+    ratioBeforeResize,
+  ))
+    .toBeLessThan(0.15);
+  const afterViewportResize = await frame.evaluate((element) =>
+    element.scrollLeft / Math.max(1, element.scrollWidth - element.clientWidth));
+  expect(Math.abs(afterViewportResize - ratioBeforeResize)).toBeLessThan(0.15);
+  expect(await readPersistedBox()).toEqual(current);
+});
+
 test.afterAll(async () => {
   await stopLocalService();
   for (const root of temporaryRoots) await rm(root, { recursive: true, force: true });

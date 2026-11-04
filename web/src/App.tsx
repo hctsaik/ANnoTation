@@ -269,7 +269,7 @@ export default function App() {
     ? workspace.handoff_context
     : null;
 
-  async function refreshWorkspace(id = manifestId) {
+  async function refreshWorkspace(id = manifestId, resetCanvas = true) {
     if (!id) return;
     setBusy(true);
     try {
@@ -281,7 +281,7 @@ export default function App() {
         setDetail(refreshed);
         setClassification(refreshed.item.classification ?? "");
         setDirty(false);
-        setCanvasRevision((current) => current + 1);
+        if (resetCanvas) setCanvasRevision((current) => current + 1);
       }
     } catch (reason) {
       setError(shortError(reason));
@@ -297,7 +297,7 @@ export default function App() {
       await api.saveAnnotation(manifestId, selectedId, detail.annotation);
       setDirty(false);
       setNotice("標注已保存");
-      await refreshWorkspace();
+      await refreshWorkspace(manifestId, false);
     } catch (reason) {
       setError(shortError(reason));
     } finally {

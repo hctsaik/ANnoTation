@@ -111,11 +111,19 @@ export function AnnotationCanvas({ itemKey, imageUrl, annotation, labels, readOn
     const frame = frameRef.current;
     if (!frame || !dimensions.width || !dimensions.height) return;
     let reflowFrame = 0;
+    let lastClientWidth = frame.clientWidth;
+    let lastClientHeight = frame.clientHeight;
+    let scrollRatioX = 0.5;
+    let scrollRatioY = 0.5;
+    const rememberScrollPosition = () => {
+      if (frame.clientWidth !== lastClientWidth || frame.clientHeight !== lastClientHeight) return;
+      const maxX = Math.max(0, frame.scrollWidth - frame.clientWidth);
+      const maxY = Math.max(0, frame.scrollHeight - frame.clientHeight);
+      if (maxX > 0) scrollRatioX = frame.scrollLeft / maxX;
+      if (maxY > 0) scrollRatioY = frame.scrollTop / maxY;
+    };
     const updateFit = () => {
-      const previousMaxX = Math.max(0, frame.scrollWidth - frame.clientWidth);
-      const previousMaxY = Math.max(0, frame.scrollHeight - frame.clientHeight);
-      const scrollRatioX = previousMaxX > 0 ? frame.scrollLeft / previousMaxX : 0.5;
-      const scrollRatioY = previousMaxY > 0 ? frame.scrollTop / previousMaxY : 0.5;
+      rememberScrollPosition();
       const frameBounds = frame.getBoundingClientRect();
       const availableWidth = Math.max(1, frameBounds.width - 24);
       const availableHeight = Math.max(1, frameBounds.height - 24);
@@ -127,13 +135,18 @@ export function AnnotationCanvas({ itemKey, imageUrl, annotation, labels, readOn
         const nextMaxY = Math.max(0, frame.scrollHeight - frame.clientHeight);
         frame.scrollLeft = nextMaxX * scrollRatioX;
         frame.scrollTop = nextMaxY * scrollRatioY;
+        lastClientWidth = frame.clientWidth;
+        lastClientHeight = frame.clientHeight;
+        rememberScrollPosition();
         reflowFrame = 0;
       });
     };
+    frame.addEventListener("scroll", rememberScrollPosition, { passive: true });
     updateFit();
     if (typeof ResizeObserver === "undefined") {
       window.addEventListener("resize", updateFit);
       return () => {
+        frame.removeEventListener("scroll", rememberScrollPosition);
         window.removeEventListener("resize", updateFit);
         if (reflowFrame) cancelAnimationFrame(reflowFrame);
       };
@@ -142,6 +155,7 @@ export function AnnotationCanvas({ itemKey, imageUrl, annotation, labels, readOn
     observer.observe(frame);
     return () => {
       observer.disconnect();
+      frame.removeEventListener("scroll", rememberScrollPosition);
       if (reflowFrame) cancelAnimationFrame(reflowFrame);
     };
   }, [dimensions]);
