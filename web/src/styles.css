@@ -236,7 +236,7 @@ input:focus, select:focus, textarea:focus { border-color: #8bc5af !important; bo
 .handoff-review-distance { color: #7e8da1; font-size: 8px; white-space: nowrap; }
 .compact-button { min-height: 31px; padding: 7px 10px; font-size: 9px; }
 .canvas-panel { overflow: hidden; border: 1px solid #e8eeeb; background: #fff; border-radius: 10px; box-shadow: var(--shadow); }
-.canvas-toolbar { display: flex; align-items: center; gap: 9px; min-height: 45px; padding: 6px 10px; border-bottom: 1px solid #eef1ef; }
+.canvas-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; min-height: 45px; padding: 6px 10px; border-bottom: 1px solid #eef1ef; }
 .tool-switch { display: flex; padding: 2px; border: 1px solid #e9eeeb; background: #f8faf9; border-radius: 6px; }
 .tool-switch button { border: 0; background: transparent; border-radius: 4px; padding: 6px 8px; color: #9aa59e; font-size: 9px; }
 .tool-switch button.active { background: white; color: #37886f; box-shadow: 0 1px 3px rgba(22,50,38,.08); }
@@ -244,7 +244,12 @@ input:focus, select:focus, textarea:focus { border-color: #8bc5af !important; bo
 .label-picker select { max-width: 110px; border: 1px solid #e9eeeb; padding: 5px 17px 5px 6px; border-radius: 5px; background: #fff; color: #64746b; font-size: 9px; }
 .toolbar-spacer { flex: 1; }
 .canvas-toolbar .quiet-button { padding: 6px 7px; border-color: transparent; font-size: 9px; }
+.zoom-controls { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px; padding-left: 5px; border-left: 1px solid #edf1ee; }
+.zoom-controls > span { min-width: 31px; color: #74817a; font-size: 8px; text-align: center; font-variant-numeric: tabular-nums; }
 .canvas-frame { display: grid; place-items: center; min-height: 350px; max-height: min(64vh, 680px); overflow: auto; background-color: #f1f3f1; background-image: linear-gradient(45deg,#e8ebe8 25%,transparent 25%),linear-gradient(-45deg,#e8ebe8 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#e8ebe8 75%),linear-gradient(-45deg,transparent 75%,#e8ebe8 75%); background-size: 18px 18px; background-position: 0 0,0 9px,9px -9px,-9px 0; }
+.canvas-frame.zoomed { display: block; }
+.canvas-frame.pan-mode .annotation-canvas { cursor: grab; }
+.canvas-frame.pan-mode .annotation-canvas:active { cursor: grabbing; }
 .annotation-canvas { display: block; width: auto; max-width: 100%; max-height: 64vh; height: auto; outline: none; touch-action: none; cursor: crosshair; box-shadow: 0 2px 10px rgba(34,44,38,.1); }
 .annotation-canvas.draw-mode { cursor: crosshair; }
 .image-loading { color: #87948c; font-size: 11px; padding: 80px 0; }

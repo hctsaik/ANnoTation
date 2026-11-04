@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type WheelEvent } from "react";
 import { clampBox, rectangleToBox, replaceRectangles, type Box } from "./annotationModel";
 import type { Annotation } from "./types";
 
@@ -67,8 +67,11 @@ function resizeBox(
 
 export function AnnotationCanvas({ itemKey, imageUrl, annotation, labels, readOnly = false, onChange }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
   const gestureRef = useRef<Gesture | null>(null);
+  const panRef = useRef<{ clientX: number; clientY: number; scrollLeft: number; scrollTop: number } | null>(null);
+  const spaceDownRef = useRef(false);
   const undoRef = useRef<Box[][]>([]);
   const redoRef = useRef<Box[][]>([]);
   const [boxes, setBoxes] = useState<Box[]>(() => annotation.shapes.map(rectangleToBox).filter((box): box is Box => box !== null));
@@ -76,6 +79,9 @@ export function AnnotationCanvas({ itemKey, imageUrl, annotation, labels, readOn
   const [activeLabel, setActiveLabel] = useState(labels[0] ?? "object");
   const [dimensions, setDimensions] = useState({ width: annotation.imageWidth ?? 0, height: annotation.imageHeight ?? 0 });
   const [tool, setTool] = useState<"draw" | "select">("draw");
+  const [zoom, setZoom] = useState(1);
+  const [panMode, setPanMode] = useState(false);
+  const [fitSize, setFitSize] = useState({ width: 0, height: 0 });
   const [undoCount, setUndoCount] = useState(0);
   const [redoCount, setRedoCount] = useState(0);
 
@@ -84,6 +90,13 @@ export function AnnotationCanvas({ itemKey, imageUrl, annotation, labels, readOn
     image.onload = () => {
       imageRef.current = image;
       setDimensions({ width: image.naturalWidth, height: image.naturalHeight });
+      setZoom(1);
+      setPanMode(false);
+      panRef.current = null;
+      if (frameRef.current) {
+        frameRef.current.scrollLeft = 0;
+        frameRef.current.scrollTop = 0;
+      }
       paint();
     };
     image.src = imageUrl;
@@ -93,6 +106,26 @@ export function AnnotationCanvas({ itemKey, imageUrl, annotation, labels, readOn
     // A canvas is remounted when the selected image changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemKey, imageUrl]);
+
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (!frame || !dimensions.width || !dimensions.height) return;
+    const updateFit = () => {
+      const frameBounds = frame.getBoundingClientRect();
+      const availableWidth = Math.max(1, frameBounds.width - 24);
+      const availableHeight = Math.max(1, frameBounds.height - 24);
+      const scale = Math.min(1, availableWidth / dimensions.width, availableHeight / dimensions.height);
+      setFitSize({ width: dimensions.width * scale, height: dimensions.height * scale });
+    };
+    updateFit();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateFit);
+      return () => window.removeEventListener("resize", updateFit);
+    }
+    const observer = new ResizeObserver(updateFit);
+    observer.observe(frame);
+    return () => observer.disconnect();
+  }, [dimensions]);
 
   useEffect(() => {
     setActiveLabel((current) => (labels.includes(current) ? current : labels[0] ?? "object"));
@@ -195,8 +228,76 @@ export function AnnotationCanvas({ itemKey, imageUrl, annotation, labels, readOn
     return hit?.name || null;
   }
 
+  function zoomAround(nextZoom: number, clientX?: number, clientY?: number) {
+    const frame = frameRef.current;
+    const canvas = canvasRef.current;
+    const next = Math.max(0.25, Math.min(8, nextZoom));
+    if (!frame || !canvas || !fitSize.width || !fitSize.height) {
+      setZoom(next);
+      return;
+    }
+    const frameBounds = frame.getBoundingClientRect();
+    const canvasBounds = canvas.getBoundingClientRect();
+    const localX = clientX === undefined ? frame.clientWidth / 2 : clientX - frameBounds.left;
+    const localY = clientY === undefined ? frame.clientHeight / 2 : clientY - frameBounds.top;
+    const imageX = canvasBounds.width > 0 ? (localX + frameBounds.left - canvasBounds.left) / canvasBounds.width : 0.5;
+    const imageY = canvasBounds.height > 0 ? (localY + frameBounds.top - canvasBounds.top) / canvasBounds.height : 0.5;
+    setZoom(next);
+    requestAnimationFrame(() => {
+      frame.scrollLeft = imageX * fitSize.width * next - localX;
+      frame.scrollTop = imageY * fitSize.height * next - localY;
+    });
+  }
+
+  function fitImage() {
+    setZoom(1);
+    if (frameRef.current) {
+      frameRef.current.scrollLeft = 0;
+      frameRef.current.scrollTop = 0;
+    }
+  }
+
+  function zoomToSelected() {
+    const frame = frameRef.current;
+    const box = boxes[selected];
+    if (!frame || !box || !dimensions.width || !fitSize.width) return;
+    const fitScale = fitSize.width / dimensions.width;
+    const targetZoom = Math.min(
+      8,
+      Math.max(1, Math.min(
+        frame.clientWidth / Math.max(1, box.width * fitScale * 1.15),
+        frame.clientHeight / Math.max(1, box.height * fitScale * 1.15),
+      )),
+    );
+    setZoom(targetZoom);
+    requestAnimationFrame(() => {
+      frame.scrollLeft = (box.x + box.width / 2) * fitScale * targetZoom - frame.clientWidth / 2;
+      frame.scrollTop = (box.y + box.height / 2) * fitScale * targetZoom - frame.clientHeight / 2;
+    });
+  }
+
+  function wheelZoom(event: WheelEvent<HTMLDivElement>) {
+    event.preventDefault();
+    zoomAround(zoom * (event.deltaY < 0 ? 1.1 : 0.9), event.clientX, event.clientY);
+  }
+
   function pointerDown(event: PointerEvent<HTMLCanvasElement>) {
-    if (readOnly || !dimensions.width || !dimensions.height) return;
+    if (!dimensions.width || !dimensions.height) return;
+    if (panMode || spaceDownRef.current || event.button === 1) {
+      event.currentTarget.focus();
+      event.preventDefault();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      if (frameRef.current) {
+        panRef.current = {
+          clientX: event.clientX,
+          clientY: event.clientY,
+          scrollLeft: frameRef.current.scrollLeft,
+          scrollTop: frameRef.current.scrollTop,
+        };
+      }
+      return;
+    }
+    if (readOnly) return;
     event.currentTarget.focus();
     event.currentTarget.setPointerCapture(event.pointerId);
     const { x, y } = coords(event);
@@ -232,6 +333,12 @@ export function AnnotationCanvas({ itemKey, imageUrl, annotation, labels, readOn
   }
 
   function pointerMove(event: PointerEvent<HTMLCanvasElement>) {
+    const pan = panRef.current;
+    if (pan && frameRef.current) {
+      frameRef.current.scrollLeft = pan.scrollLeft - (event.clientX - pan.clientX);
+      frameRef.current.scrollTop = pan.scrollTop - (event.clientY - pan.clientY);
+      return;
+    }
     if (readOnly) return;
     const gesture = gestureRef.current;
     if (!gesture) return;
@@ -255,6 +362,10 @@ export function AnnotationCanvas({ itemKey, imageUrl, annotation, labels, readOn
   }
 
   function pointerUp() {
+    if (panRef.current) {
+      panRef.current = null;
+      return;
+    }
     if (readOnly) {
       gestureRef.current = null;
       return;
@@ -293,9 +404,34 @@ export function AnnotationCanvas({ itemKey, imageUrl, annotation, labels, readOn
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (readOnly) return;
     const target = event.target as HTMLElement;
     if (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
+    if (event.key === " ") {
+      spaceDownRef.current = true;
+      event.preventDefault();
+      return;
+    }
+    if (event.key === "+" || event.key === "=") {
+      event.preventDefault();
+      zoomAround(zoom * 1.1);
+      return;
+    }
+    if (event.key === "-") {
+      event.preventDefault();
+      zoomAround(zoom * 0.9);
+      return;
+    }
+    if (event.key.toLowerCase() === "f" || event.key === "0") {
+      event.preventDefault();
+      fitImage();
+      return;
+    }
+    if (event.key.toLowerCase() === "z" && !event.ctrlKey && !event.metaKey) {
+      event.preventDefault();
+      zoomToSelected();
+      return;
+    }
+    if (readOnly) return;
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
       event.preventDefault();
       if (event.shiftKey) redo(); else undo();
@@ -327,6 +463,10 @@ export function AnnotationCanvas({ itemKey, imageUrl, annotation, labels, readOn
     }
   }
 
+  function onKeyUp(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key === " ") spaceDownRef.current = false;
+  }
+
   function changeLabel(index: number, label: string) {
     const next = boxes.map((box, row) => row === index ? { ...box, label } : box);
     commit(boxes);
@@ -348,8 +488,24 @@ export function AnnotationCanvas({ itemKey, imageUrl, annotation, labels, readOn
         <span className="toolbar-spacer" />
         <button className="quiet-button" onClick={undo} disabled={readOnly || !undoCount} type="button">↶ 復原</button>
         <button className="quiet-button" onClick={redo} disabled={readOnly || !redoCount} type="button">↷ 重做</button>
+        <div className="zoom-controls" role="group" aria-label="影像縮放與平移">
+          <button className="quiet-button" type="button" aria-label="縮小影像" onClick={() => zoomAround(zoom * 0.9)}>−</button>
+          <span aria-live="polite">{Math.round(zoom * 100)}%</span>
+          <button className="quiet-button" type="button" aria-label="放大影像" onClick={() => zoomAround(zoom * 1.1)}>＋</button>
+          <button className="quiet-button" type="button" onClick={fitImage}>適合</button>
+          <button className="quiet-button" type="button" onClick={zoomToSelected} disabled={selected < 0}>選取框</button>
+          <button className={`quiet-button ${panMode ? "active" : ""}`} type="button" aria-pressed={panMode} onClick={() => setPanMode((active) => !active)}>✋ 平移</button>
+        </div>
       </div>
-      <div className="canvas-frame" onKeyDown={onKeyDown} tabIndex={0}>
+      <div
+        ref={frameRef}
+        className={`canvas-frame${zoom > 1 ? " zoomed" : ""}${panMode ? " pan-mode" : ""}`}
+        onKeyDown={onKeyDown}
+        onKeyUp={onKeyUp}
+        onBlur={() => { spaceDownRef.current = false; panRef.current = null; }}
+        onWheel={wheelZoom}
+        tabIndex={0}
+      >
         {dimensions.width > 0 ? (
           <canvas
             ref={canvasRef}
@@ -357,6 +513,12 @@ export function AnnotationCanvas({ itemKey, imageUrl, annotation, labels, readOn
             className={tool === "draw" ? "annotation-canvas draw-mode" : "annotation-canvas"}
             width={dimensions.width}
             height={dimensions.height}
+            style={fitSize.width && fitSize.height ? {
+              width: fitSize.width * zoom,
+              height: fitSize.height * zoom,
+              maxWidth: "none",
+              maxHeight: "none",
+            } : undefined}
             onPointerDown={pointerDown}
             onPointerMove={pointerMove}
             onPointerUp={pointerUp}
@@ -381,7 +543,7 @@ export function AnnotationCanvas({ itemKey, imageUrl, annotation, labels, readOn
           </div>
         ))}
       </div>
-      <p className="canvas-hint">{readOnly ? "此外部任務已完成，標注內容為唯讀。" : "拖曳框選；拖動框內可移動，選取後用八個把手調整大小；Alt 拖把手可對稱縮放。方向鍵微調位置、Shift 加速，Alt+方向鍵微調大小；Delete 刪除、Ctrl+Z 復原、Ctrl+Y 重做。"}</p>
+      <p className="canvas-hint">{readOnly ? "此外部任務已完成，標注內容為唯讀。" : "拖曳框選；拖動框內可移動，選取後用八個把手調整大小；Alt 拖把手可對稱縮放。滾輪或 +/- 縮放，F／0 適合全圖，Z 縮放至選取框；平移模式、Space＋拖曳或滑鼠中鍵可移動畫布。方向鍵微調位置、Shift 加速，Alt+方向鍵微調大小；Delete 刪除、Ctrl+Z 復原、Ctrl+Y 重做。"}</p>
     </section>
   );
 }
