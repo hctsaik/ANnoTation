@@ -17,10 +17,53 @@ type Gesture = {
   startX: number;
   startY: number;
   original?: Box;
+  handle?: ResizeHandle;
+  symmetric?: boolean;
   before: Box[];
 };
 
+type ResizeHandle = "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "nw";
+
 const MIN_SIZE = 3;
+
+function resizeBox(
+  original: Box,
+  handle: ResizeHandle,
+  dx: number,
+  dy: number,
+  imageWidth: number,
+  imageHeight: number,
+  symmetric = false,
+): Box {
+  if (symmetric) {
+    const centerX = original.x + original.width / 2;
+    const centerY = original.y + original.height / 2;
+    const maxHalfWidth = Math.max(0, Math.min(centerX, imageWidth - centerX));
+    const maxHalfHeight = Math.max(0, Math.min(centerY, imageHeight - centerY));
+    const halfWidth = handle.includes("e") || handle.includes("w")
+      ? Math.min(maxHalfWidth, Math.max(MIN_SIZE / 2, original.width / 2 + (handle.includes("e") ? dx : -dx)))
+      : original.width / 2;
+    const halfHeight = handle.includes("n") || handle.includes("s")
+      ? Math.min(maxHalfHeight, Math.max(MIN_SIZE / 2, original.height / 2 + (handle.includes("s") ? dy : -dy)))
+      : original.height / 2;
+    return {
+      ...original,
+      x: centerX - halfWidth,
+      y: centerY - halfHeight,
+      width: halfWidth * 2,
+      height: halfHeight * 2,
+    };
+  }
+  let left = original.x;
+  let right = original.x + original.width;
+  let top = original.y;
+  let bottom = original.y + original.height;
+  if (handle.includes("w")) left = Math.max(0, Math.min(right - MIN_SIZE, original.x + dx));
+  if (handle.includes("e")) right = Math.min(imageWidth, Math.max(left + MIN_SIZE, original.x + original.width + dx));
+  if (handle.includes("n")) top = Math.max(0, Math.min(bottom - MIN_SIZE, original.y + dy));
+  if (handle.includes("s")) bottom = Math.min(imageHeight, Math.max(top + MIN_SIZE, original.y + original.height + dy));
+  return { ...original, x: left, y: top, width: right - left, height: bottom - top };
+}
 
 export function AnnotationCanvas({ itemKey, imageUrl, annotation, labels, readOnly = false, onChange }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -96,9 +139,17 @@ export function AnnotationCanvas({ itemKey, imageUrl, annotation, labels, readOn
       if (index === selected) {
         const handle = Math.max(8, canvas.width / 130);
         ctx.fillStyle = "#fff";
-        ctx.fillRect(box.x + box.width - handle / 2, box.y + box.height - handle / 2, handle, handle);
         ctx.strokeStyle = "#f0643b";
-        ctx.strokeRect(box.x + box.width - handle / 2, box.y + box.height - handle / 2, handle, handle);
+        const handles: Array<[number, number]> = [
+          [box.x, box.y], [box.x + box.width / 2, box.y], [box.x + box.width, box.y],
+          [box.x + box.width, box.y + box.height / 2], [box.x + box.width, box.y + box.height],
+          [box.x + box.width / 2, box.y + box.height], [box.x, box.y + box.height],
+          [box.x, box.y + box.height / 2],
+        ];
+        for (const [x, y] of handles) {
+          ctx.fillRect(x - handle / 2, y - handle / 2, handle, handle);
+          ctx.strokeRect(x - handle / 2, y - handle / 2, handle, handle);
+        }
       }
     });
   }
@@ -118,10 +169,30 @@ export function AnnotationCanvas({ itemKey, imageUrl, annotation, labels, readOn
 
   function coords(event: PointerEvent<HTMLCanvasElement>) {
     const rect = event.currentTarget.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return { x: 0, y: 0 };
+    const scaleX = event.currentTarget.width / rect.width;
+    const scaleY = event.currentTarget.height / rect.height;
     return {
-      x: (event.clientX - rect.left) * (event.currentTarget.width / rect.width),
-      y: (event.clientY - rect.top) * (event.currentTarget.height / rect.height),
+      x: Math.max(0, Math.min(event.currentTarget.width, (event.clientX - rect.left) * scaleX)),
+      y: Math.max(0, Math.min(event.currentTarget.height, (event.clientY - rect.top) * scaleY)),
     };
+  }
+
+  function resizeHandleAt(box: Box, x: number, y: number): ResizeHandle | null {
+    const tolerance = Math.max(8, dimensions.width / 260 + 5);
+    const midX = box.x + box.width / 2;
+    const midY = box.y + box.height / 2;
+    const handles: Array<[ResizeHandle, number, number]> = [
+      ["nw", box.x, box.y], ["n", midX, box.y], ["ne", box.x + box.width, box.y],
+      ["e", box.x + box.width, midY], ["se", box.x + box.width, box.y + box.height],
+      ["s", midX, box.y + box.height], ["sw", box.x, box.y + box.height],
+      ["w", box.x, midY],
+    ];
+    const hit = handles
+      .map(([name, handleX, handleY]) => ({ name, distance: Math.hypot(x - handleX, y - handleY) }))
+      .filter((candidate) => candidate.distance <= tolerance)
+      .sort((left, right) => left.distance - right.distance)[0];
+    return hit?.name || null;
   }
 
   function pointerDown(event: PointerEvent<HTMLCanvasElement>) {
@@ -129,6 +200,15 @@ export function AnnotationCanvas({ itemKey, imageUrl, annotation, labels, readOn
     event.currentTarget.focus();
     event.currentTarget.setPointerCapture(event.pointerId);
     const { x, y } = coords(event);
+    const selectedBox = boxes[selected];
+    const selectedHandle = selectedBox ? resizeHandleAt(selectedBox, x, y) : null;
+    if (selectedBox && selectedHandle) {
+      gestureRef.current = {
+        kind: "resize", index: selected, handle: selectedHandle,
+        startX: x, startY: y, original: selectedBox, symmetric: event.altKey, before: boxes,
+      };
+      return;
+    }
     let hit = -1;
     for (let index = boxes.length - 1; index >= 0; index -= 1) {
       const box = boxes[index];
@@ -138,10 +218,9 @@ export function AnnotationCanvas({ itemKey, imageUrl, annotation, labels, readOn
       }
     }
     const current = hit >= 0 ? boxes[hit] : undefined;
-    const resizeHit = current && Math.abs(x - current.x - current.width) < dimensions.width / 55 && Math.abs(y - current.y - current.height) < dimensions.width / 55;
     if (current) {
       setSelected(hit);
-      gestureRef.current = { kind: resizeHit ? "resize" : "move", index: hit, startX: x, startY: y, original: current, before: boxes };
+      gestureRef.current = { kind: "move", index: hit, startX: x, startY: y, original: current, before: boxes };
     } else if (tool === "draw") {
       const next = [...boxes, { x, y, width: 0, height: 0, label: activeLabel }];
       setSelected(next.length - 1);
@@ -168,7 +247,7 @@ export function AnnotationCanvas({ itemKey, imageUrl, annotation, labels, readOn
       const original = gesture.original;
       next[gesture.index] = gesture.kind === "move"
         ? { ...original, x: original.x + dx, y: original.y + dy }
-        : { ...original, width: Math.max(0, original.width + dx), height: Math.max(0, original.height + dy) };
+        : resizeBox(original, gesture.handle || "se", dx, dy, dimensions.width, dimensions.height, gesture.symmetric);
       next[gesture.index] = clampBox(next[gesture.index], dimensions.width, dimensions.height);
     }
     setBoxes(next);
@@ -223,6 +302,20 @@ export function AnnotationCanvas({ itemKey, imageUrl, annotation, labels, readOn
     } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y") {
       event.preventDefault();
       redo();
+    } else if (selected >= 0 && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
+      event.preventDefault();
+      const step = event.shiftKey ? 10 : 1;
+      const dx = event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0;
+      const dy = event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0;
+      const next = boxes.map((box, index) => {
+        if (index !== selected) return box;
+        const changed = event.altKey
+          ? { ...box, width: Math.max(MIN_SIZE, box.width + dx), height: Math.max(MIN_SIZE, box.height + dy) }
+          : { ...box, x: box.x + dx, y: box.y + dy };
+        return clampBox(changed, dimensions.width, dimensions.height);
+      });
+      commit(boxes);
+      emit(next);
     } else if ((event.key === "Delete" || event.key === "Backspace") && selected >= 0) {
       event.preventDefault();
       const next = boxes.filter((_box, index) => index !== selected);
@@ -288,7 +381,7 @@ export function AnnotationCanvas({ itemKey, imageUrl, annotation, labels, readOn
           </div>
         ))}
       </div>
-      <p className="canvas-hint">{readOnly ? "此外部任務已完成，標注內容為唯讀。" : "拖曳框選；拖動框內可移動，拖動右下角可調整大小。快捷鍵：Delete 刪除、Ctrl+Z 復原、Ctrl+Y 重做。"}</p>
+      <p className="canvas-hint">{readOnly ? "此外部任務已完成，標注內容為唯讀。" : "拖曳框選；拖動框內可移動，選取後用八個把手調整大小；Alt 拖把手可對稱縮放。方向鍵微調位置、Shift 加速，Alt+方向鍵微調大小；Delete 刪除、Ctrl+Z 復原、Ctrl+Y 重做。"}</p>
     </section>
   );
 }

@@ -7,11 +7,12 @@ remain in the source tree as migration references and are not part of this
 runtime.
 
 **Migration status:** local-folder and remote Service ingestion, synthetic HTTP
-iWISC task listing and claim, the rectangle Canvas workflow, classification,
-review, a COCO export path, and a confirmed label-merge impact preview are
-implemented. The remote Service browser journey now lists and downloads a
-synthetic dataset, saves a local annotation, and reads it back after restarting
-the local service. The iWISC path saves React sidecars into the local task record
+iWISC task listing and claim, the rectangle Canvas workflow with eight-handle
+and symmetric resize, keyboard fine adjustment, classification, review, a COCO
+export path, and a confirmed label-merge impact preview are implemented. The
+remote Service browser journey now lists and downloads a synthetic dataset,
+saves a local annotation, and reads it back after restarting the local service.
+The iWISC path saves React sidecars into the local task record
 and supports local task completion. A connection can opt into JSON result
 delivery by configuring its relative API path and method; without a path,
 external delivery remains unsupported. The local workflow has a synthetic real-service browser
